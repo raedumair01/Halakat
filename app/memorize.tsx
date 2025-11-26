@@ -3,7 +3,18 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Image
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import Svg, { Path, Rect, Circle, Defs, LinearGradient as SvgLinearGradient, Stop, ClipPath, G } from 'react-native-svg';
+import { fonts } from './fonts';
+import Svg, {
+  Path,
+  Rect,
+  Circle,
+  Defs,
+  LinearGradient as SvgLinearGradient,
+  Stop,
+  ClipPath,
+  G,
+  Mask,
+} from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DESIGN_WIDTH = 374;
@@ -48,18 +59,19 @@ function ReadQuranIcon() {
 
 function BackArrowIcon() {
   return (
-    <Svg width={13} height={13} viewBox="0 0 13 13" fill="none">
+    <Svg width={26} height={26} viewBox="0 0 26 26" fill="none">
+      <Circle cx={13} cy={13} r={13} fill="#006754" fillOpacity={0.11} />
       <Path
-        d="M7.5 1.5L3.5 6.5L7.5 11.5"
+        d="M21.4167 12.5L6.375 12.5"
         stroke="#004B40"
-        strokeWidth="1.5"
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
-        d="M3.5 6.5H10.5"
+        d="M11.9167 18.0416L6.375 12.5L11.9167 6.95829"
         stroke="#004B40"
-        strokeWidth="1.5"
+        strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -154,6 +166,56 @@ function ClipboardIllustration() {
   );
 }
 
+function ExistingPlanCurve() {
+  return (
+    <Svg width={224 * SCALE} height={224 * SCALE} viewBox="0 0 224 224" fill="none">
+      <Mask
+        id="existingCurveMask"
+        maskUnits="userSpaceOnUse"
+        x={0}
+        y={0}
+        width={224}
+        height={224}
+        maskType="alpha"
+      >
+        <Rect width={224} height={224} rx={112} fill="#E2F6F8" />
+      </Mask>
+      <G mask="url(#existingCurveMask)">
+        <Path
+          d="M161.296 168.711C207.835 115.271 242.523 102.47 268.463 107.128C295.895 112.054 304.047 144.947 300.824 172.631C295.507 218.307 257.541 253.201 211.58 254.654L-45.8919 262.796C-60.8377 263.268 -73.7541 252.44 -75.897 237.641C-79.5083 212.703 -50.8356 193.199 -26.9157 201.125C35.0974 221.672 113.253 223.878 161.296 168.711Z"
+          fill="#2BFF00"
+          fillOpacity={0.1}
+        />
+      </G>
+    </Svg>
+  );
+}
+
+function NewPlanCurve() {
+  return (
+     <Svg width={300} height={300} viewBox="0 0 224 224" fill="none">
+      <Mask
+        id="existingCurveMask"
+        maskUnits="userSpaceOnUse"
+        x={0}
+        y={0}
+        width={300}
+        height={300}
+        maskType="alpha"
+      >
+        <Rect width={224} height={224} rx={112} fill="#E2F6F8" />
+      </Mask>
+      <G mask="url(#existingCurveMask)">
+        <Path
+          d="M161.296 168.711C207.835 115.271 242.523 102.47 268.463 107.128C295.895 112.054 304.047 144.947 300.824 172.631C295.507 218.307 257.541 253.201 211.58 254.654L-45.8919 262.796C-60.8377 263.268 -73.7541 252.44 -75.897 237.641C-79.5083 212.703 -50.8356 193.199 -26.9157 201.125C35.0974 221.672 113.253 223.878 161.296 168.711Z"
+          fill="#061528"
+          fillOpacity={0.1}
+        />
+      </G>
+    </Svg>
+  );
+}
+
 export default function MemorizeScreen() {
   const router = useRouter();
 
@@ -189,7 +251,7 @@ export default function MemorizeScreen() {
           </View>
 
           {/* Read Quran Card */}
-          <TouchableOpacity style={styles.readQuranCard}>
+          <TouchableOpacity style={styles.readQuranCard} onPress={() => router.push('/recite')}>
             <LinearGradient
               colors={['#6F9A84', '#BDCCC1']}
               style={styles.readQuranGradient}
@@ -216,7 +278,9 @@ export default function MemorizeScreen() {
             {/* Existing Plan */}
             <View style={styles.existingPlanContainer}>
               <View style={styles.existingPlanBase} />
-              <View style={styles.existingPlanVector} />
+          <View style={styles.existingPlanVector}>
+            {/* <ExistingPlanCurve /> */}
+          </View>
               <View style={styles.existingPlanCircle}>
                 <Text style={styles.existingPlanTitle}>{'Existing\nPlan'}</Text>
                 <View style={styles.existingPlanIcon}>
@@ -228,7 +292,9 @@ export default function MemorizeScreen() {
             {/* New Plan */}
             <View style={styles.newPlanContainer}>
               <View style={styles.newPlanBase} />
-              <View style={styles.newPlanVector} />
+          <View style={styles.newPlanVector}>
+            {/* <NewPlanCurve /> */}
+          </View>
               <View style={styles.newPlanCircle}>
                 <Text style={styles.newPlanTitle}>{'New\nPlan'}</Text>
                 <View style={styles.newPlanIcon}>
@@ -276,9 +342,9 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 20 * SCALE,
-    fontWeight: '700',
     color: '#0C3B2A',
     textAlign: 'center',
+    fontFamily: fonts.bold,
   },
   searchButton: {
     width: 24 * SCALE,
@@ -299,7 +365,6 @@ const styles = StyleSheet.create({
     width: 26 * SCALE,
     height: 26 * SCALE,
     borderRadius: 13 * SCALE,
-    backgroundColor: 'rgba(0, 103, 84, 0.11)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -310,10 +375,10 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 18 * SCALE,
-    fontWeight: '500',
     color: '#B7B1CE',
     marginBottom: 6 * SCALE,
     lineHeight: 27 * SCALE,
+    fontFamily: fonts.medium,
   },
   sectionHeadingRow: {
     flexDirection: 'row',
@@ -328,9 +393,9 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 24 * SCALE,
-    fontWeight: '600',
     color: '#0B3727',
     lineHeight: 36 * SCALE,
+    fontFamily: fonts.semiBold,
   },
   readQuranCard: {
     width: 340 * SCALE,
@@ -389,9 +454,9 @@ const styles = StyleSheet.create({
   },
   readQuranLabel: {
     fontSize: 18 * SCALE,
-    fontWeight: '500',
     color: '#FFFFFF',
     lineHeight: 20 * SCALE,
+    fontFamily: fonts.medium,
   },
   readQuranSurah: {
     position: 'absolute',
@@ -400,10 +465,9 @@ const styles = StyleSheet.create({
     width: 112 * SCALE,
     height: 27 * SCALE,
     fontSize: 18 * SCALE,
-    fontWeight: '600',
     color: '#FFFFFF',
     lineHeight: 27 * SCALE,
-    fontFamily: 'Poppins',
+    fontFamily: fonts.semiBold,
   },
   readQuranAyah: {
     position: 'absolute',
@@ -412,11 +476,10 @@ const styles = StyleSheet.create({
     width: 89 * SCALE,
     height: 21 * SCALE,
     fontSize: 14 * SCALE,
-    fontWeight: '400',
     color: '#FFFFFF',
     opacity: 0.8,
     lineHeight: 21 * SCALE,
-    fontFamily: 'Poppins',
+    fontFamily: fonts.regular,
   },
   readQuranIllustration: {
     position: 'absolute',
@@ -453,11 +516,11 @@ const styles = StyleSheet.create({
   },
   existingPlanCircle: {
     width: 260 * SCALE,
-    height: 260 * SCALE,
+    height: 250 * SCALE,
     borderRadius: 130 * SCALE,
     backgroundColor: '#F5FAF4',
     position: 'relative',
-    overflow: 'hidden',
+    overflow: 'visible',
     padding: 32 * SCALE,
     shadowColor: '#D1E6CE',
     shadowOpacity: 0.55,
@@ -467,31 +530,31 @@ const styles = StyleSheet.create({
   },
   existingPlanVector: {
     position: 'absolute',
-    width: 320 * SCALE,
-    height: 140 * SCALE,
-    borderRadius: 120 * SCALE,
-    bottom: -30 * SCALE,
-    left: -40 * SCALE,
-    opacity: 0.6,
+    width: 224 * SCALE,
+    height: 224 * SCALE,
+    top: 18 * SCALE,
+    left: 18 * SCALE,
+    zIndex: 1,
+    pointerEvents: 'none',
   },
   existingPlanTitle: {
     position: 'absolute',
     left: 36 * SCALE,
     top: 90 * SCALE,
     fontSize: 22 * SCALE,
-    fontWeight: '700',
     color: '#083B2E',
     lineHeight: 26 * SCALE,
     textAlign: 'left',
     zIndex: 3,
+    fontFamily: fonts.bold,
   },
   existingPlanIcon: {
     position: 'absolute',
-    right: -10 * SCALE,
-    top: 60 * SCALE,
-    width: 160 * SCALE,
-    height: 200 * SCALE,
-    zIndex: 2,
+    right: -30 * SCALE,
+    top: 52 * SCALE,
+    width: 170 * SCALE,
+    height: 210 * SCALE,
+    zIndex: 3,
   },
   newPlanContainer: {
     width: 280 * SCALE,
@@ -512,44 +575,47 @@ const styles = StyleSheet.create({
   },
   newPlanCircle: {
     width: 260 * SCALE,
-    height: 260 * SCALE,
+    height: 250 * SCALE,
     borderRadius: 130 * SCALE,
     backgroundColor: '#DEE5E1',
     position: 'relative',
-    overflow: 'hidden',
-    padding: 32 * SCALE,
+    overflow: 'visible',
+    padding: 30 * SCALE,
     shadowColor: '#D0D5D2',
     shadowOpacity: 0.5,
     shadowOffset: { width: 0, height: 16 },
     shadowRadius: 24,
     elevation: 12,
+   
   },
   newPlanVector: {
     position: 'absolute',
-    width: 320 * SCALE,
-    height: 140 * SCALE,
-    borderRadius: 120 * SCALE,
-    bottom: -30 * SCALE,
-    right: -50 * SCALE,
-    opacity: 0.45,
+    width: 289 * SCALE,
+    height: 317 * SCALE,
+    bottom: -24 * SCALE,
+    right: -60 * SCALE,
+    zIndex: 3,
+    pointerEvents: 'none',
+    left: -10 * SCALE,
+   
   },
   newPlanTitle: {
     position: 'absolute',
     left: 36 * SCALE,
     top: 90 * SCALE,
     fontSize: 22 * SCALE,
-    fontWeight: '700',
     color: '#083B2E',
     lineHeight: 26 * SCALE,
     textAlign: 'left',
     zIndex: 3,
+    fontFamily: fonts.bold,
   },
   newPlanIcon: {
     position: 'absolute',
-    right: 20 * SCALE,
-    top: 62 * SCALE,
-    width: 185 * SCALE,
-    height: 190 * SCALE,
-    zIndex: 2,
+    right: -24 * SCALE,
+    top: 48 * SCALE,
+    width: 195 * SCALE,
+    height: 200 * SCALE,
+    zIndex:1,
   },
 });

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform } from 'react-native';
 import { Eye, EyeOff, Facebook, Chrome, Apple } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { fonts } from './fonts';
 
 type AuthMode = 'login' | 'register';
 
@@ -161,9 +162,9 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 32,
-    fontWeight: '700',
     color: '#0F172A',
     textAlign: 'center',
+    fontFamily: fonts.bold,
   },
   subtitle: {
     fontSize: 16,
@@ -171,6 +172,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 28,
+    fontFamily: fonts.regular,
   },
   segmentControl: {
     flexDirection: 'row',
@@ -190,11 +192,12 @@ const styles = StyleSheet.create({
   },
   segmentLabel: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#6B7280',
+    fontFamily: fonts.semiBold,
   },
   segmentLabelActive: {
     color: '#0F172A',
+    fontFamily: fonts.semiBold,
   },
   form: {
     gap: 20,
@@ -209,13 +212,13 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#111827',
+    fontFamily: fonts.semiBold,
   },
   helperLink: {
     fontSize: 14,
     color: '#059669',
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
   input: {
     borderRadius: 16,
@@ -226,6 +229,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#111827',
     backgroundColor: '#F9FAFB',
+    fontFamily: fonts.regular,
   },
   inputWithIcon: {
     borderRadius: 16,
@@ -241,6 +245,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 14,
     color: '#111827',
+    fontFamily: fonts.regular,
   },
   eyeButton: {
     paddingHorizontal: 4,
@@ -256,7 +261,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
   separator: {
     flexDirection: 'row',
@@ -272,7 +277,7 @@ const styles = StyleSheet.create({
   separatorText: {
     fontSize: 14,
     color: '#9CA3AF',
-    fontWeight: '600',
+    fontFamily: fonts.semiBold,
   },
   socialRow: {
     flexDirection: 'row',
@@ -294,10 +299,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     marginTop: 28,
+    fontFamily: fonts.regular,
   },
   switchLink: {
     color: '#059669',
-    fontWeight: '700',
+    fontFamily: fonts.bold,
   },
 });
 

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import Svg, { Rect, G, Path, Defs, ClipPath } from 'react-native-svg';
+import { fonts } from './fonts';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -212,14 +213,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 34,
-    fontWeight: '700',
     color: '#0F3A2B',
+    fontFamily: fonts.bold,
   },
   subtitle: {
     fontSize: 18,
     textAlign: 'center',
     color: '#7C819A',
     marginTop: 12,
+    fontFamily: fonts.regular,
   },
   illustrationWrapper: {
     marginTop: 32,
@@ -238,8 +240,8 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     fontSize: 18,
-    fontWeight: '600',
     color: '#133327',
+    fontFamily: fonts.semiBold,
   },
 });
 

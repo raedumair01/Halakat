@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { fonts } from '../fonts';
 import Svg, {
   Path,
   Rect,
@@ -350,9 +351,9 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 25,
-    fontWeight: '700',
     color: '#0F3A2B',
     left:-40,
+    fontFamily: fonts.bold,
   },
   backButton: {
     width: 44,
@@ -383,9 +384,9 @@ const styles = StyleSheet.create({
   heroArabic: {
     fontSize: 24,
     color: '#FFFFFF',
-    fontWeight: '600',
     marginBottom: 4,
-    left:30
+    left:30,
+    fontFamily: fonts.semiBold,
   },
   heroCta: {
     flexDirection: 'row',
@@ -404,8 +405,8 @@ const styles = StyleSheet.create({
   },
   heroCtaText: {
     color: '#0F3A2B',
-    fontWeight: '600',
     fontSize: 16,
+    fontFamily: fonts.semiBold,
   },
   heroCtaIcon: {
     width: 34,
@@ -444,8 +445,8 @@ const styles = StyleSheet.create({
   },
   featureTitle: {
     fontSize: 16,
-    fontWeight: '700',
     color: '#204437',
+    fontFamily: fonts.bold,
   },
   featureIcon: {
     alignItems: 'flex-end',
