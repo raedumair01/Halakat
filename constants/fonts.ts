@@ -19,6 +19,7 @@ export const fontConfig = {
   'Poppins-ExtraBoldItalic': require('../assets/fonts/Poppins/Poppins-ExtraBoldItalic.ttf'),
   'Poppins-Black': require('../assets/fonts/Poppins/Poppins-Black.ttf'),
   'Poppins-BlackItalic': require('../assets/fonts/Poppins/Poppins-BlackItalic.ttf'),
+  'Arabic-Quran': require('../assets/fonts/Noto_Sans_Arabic/NotoSansArabic-VariableFont_wdth,wght.ttf'),
 };
 
 export const fonts = {
@@ -40,6 +41,7 @@ export const fonts = {
   extraBoldItalic: 'Poppins-ExtraBoldItalic',
   black: 'Poppins-Black',
   blackItalic: 'Poppins-BlackItalic',
+  arabicQuran: 'Arabic-Quran',
 };
 
 export function useLoadFonts() {

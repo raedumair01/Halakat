@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
 import { Eye, EyeOff, Facebook, Chrome, Apple } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { fonts } from './fonts';
+import { fonts } from '../constants/fonts';
+import { hasActiveSession, setActiveSession } from '../services/authSession';
 
 type AuthMode = 'login' | 'register';
 
@@ -11,11 +12,83 @@ export default function AuthScreen() {
   const [mode, setMode] = useState<AuthMode>('login');
   const [securePassword, setSecurePassword] = useState(true);
   const [secureConfirmPassword, setSecureConfirmPassword] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState({
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
 
   const isRegister = mode === 'register';
+  const minPasswordLength = 8;
 
-  const handleContinue = () => {
-    router.replace('/(tabs)/home');
+  useEffect(() => {
+    const checkSession = async () => {
+      const activeSession = await hasActiveSession();
+      if (activeSession) {
+        router.replace('/(tabs)/home');
+      }
+    };
+
+    checkSession();
+  }, [router]);
+
+  const clearError = (field: 'email' | 'password' | 'confirmPassword') => {
+    setErrors(prev => ({ ...prev, [field]: '' }));
+  };
+
+  const validateForm = () => {
+    const nextErrors = {
+      email: '',
+      password: '',
+      confirmPassword: '',
+    };
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      nextErrors.email = 'Email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      nextErrors.email = 'Please enter a valid email address.';
+    }
+
+    if (!password) {
+      nextErrors.password = 'Password is required.';
+    } else if (isRegister && password.length < minPasswordLength) {
+      nextErrors.password = `Password must be at least ${minPasswordLength} characters.`;
+    }
+
+    if (isRegister) {
+      if (!confirmPassword) {
+        nextErrors.confirmPassword = 'Please confirm your password.';
+      } else if (confirmPassword !== password) {
+        nextErrors.confirmPassword = 'Passwords do not match.';
+      }
+    }
+
+    setErrors(nextErrors);
+    return !nextErrors.email && !nextErrors.password && !nextErrors.confirmPassword;
+  };
+
+  const switchMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setErrors({ email: '', password: '', confirmPassword: '' });
+  };
+
+  const handleContinue = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      await setActiveSession(email.trim().toLowerCase());
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      console.error('Failed to persist auth session:', error);
+      Alert.alert('Login failed', 'Unable to save session. Please try again.');
+    }
   };
 
   return (
@@ -32,13 +105,13 @@ export default function AuthScreen() {
           <View style={styles.segmentControl}>
             <TouchableOpacity
               style={[styles.segmentButton, mode === 'login' && styles.segmentButtonActive]}
-              onPress={() => setMode('login')}
+              onPress={() => switchMode('login')}
             >
               <Text style={[styles.segmentLabel, mode === 'login' && styles.segmentLabelActive]}>Sign in</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.segmentButton, isRegister && styles.segmentButtonActive]}
-              onPress={() => setMode('register')}
+              onPress={() => switchMode('register')}
             >
               <Text style={[styles.segmentLabel, isRegister && styles.segmentLabelActive]}>Register</Text>
             </TouchableOpacity>
@@ -48,12 +121,20 @@ export default function AuthScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>{isRegister ? 'Email' : 'Email address'}</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, errors.email && styles.inputError]}
                 keyboardType="email-address"
                 placeholder={isRegister ? 'example@gmail.com' : 'Your email'}
                 placeholderTextColor="#9CA3AF"
                 autoCapitalize="none"
+                value={email}
+                onChangeText={value => {
+                  setEmail(value);
+                  if (errors.email) {
+                    clearError('email');
+                  }
+                }}
               />
+              {!!errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
             </View>
 
             <View style={styles.fieldGroup}>
@@ -65,12 +146,19 @@ export default function AuthScreen() {
                   </TouchableOpacity>
                 )}
               </View>
-              <View style={styles.inputWithIcon}>
+              <View style={[styles.inputWithIcon, errors.password && styles.inputError]}>
                 <TextInput
                   style={styles.passwordInput}
                   secureTextEntry={securePassword}
                   placeholder={isRegister ? 'must be 8 characters' : 'Password'}
                   placeholderTextColor="#9CA3AF"
+                  value={password}
+                  onChangeText={value => {
+                    setPassword(value);
+                    if (errors.password) {
+                      clearError('password');
+                    }
+                  }}
                 />
                 <TouchableOpacity
                   style={styles.eyeButton}
@@ -80,17 +168,25 @@ export default function AuthScreen() {
                   {securePassword ? <EyeOff size={20} color="#6B7280" /> : <Eye size={20} color="#6B7280" />}
                 </TouchableOpacity>
               </View>
+              {!!errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
             </View>
 
             {isRegister && (
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Confirm password</Text>
-                <View style={styles.inputWithIcon}>
+                <View style={[styles.inputWithIcon, errors.confirmPassword && styles.inputError]}>
                   <TextInput
                     style={styles.passwordInput}
                     secureTextEntry={secureConfirmPassword}
                     placeholder="repeat password"
                     placeholderTextColor="#9CA3AF"
+                    value={confirmPassword}
+                    onChangeText={value => {
+                      setConfirmPassword(value);
+                      if (errors.confirmPassword) {
+                        clearError('confirmPassword');
+                      }
+                    }}
                   />
                   <TouchableOpacity
                     style={styles.eyeButton}
@@ -100,6 +196,7 @@ export default function AuthScreen() {
                     {secureConfirmPassword ? <EyeOff size={20} color="#6B7280" /> : <Eye size={20} color="#6B7280" />}
                   </TouchableOpacity>
                 </View>
+                {!!errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
               </View>
             )}
           </View>
@@ -124,7 +221,7 @@ export default function AuthScreen() {
 
           <Text style={styles.switchText}>
             {isRegister ? 'Already have an account? ' : `Don't have an account? `}
-            <Text style={styles.switchLink} onPress={() => setMode(isRegister ? 'login' : 'register')}>
+            <Text style={styles.switchLink} onPress={() => switchMode(isRegister ? 'login' : 'register')}>
               {isRegister ? 'Log in' : 'Register'}
             </Text>
           </Text>
@@ -231,6 +328,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     fontFamily: fonts.regular,
   },
+  inputError: {
+    borderColor: '#DC2626',
+  },
   inputWithIcon: {
     borderRadius: 16,
     borderWidth: 1,
@@ -304,6 +404,11 @@ const styles = StyleSheet.create({
   switchLink: {
     color: '#059669',
     fontFamily: fonts.bold,
+  },
+  errorText: {
+    color: '#DC2626',
+    fontSize: 13,
+    fontFamily: fonts.regular,
   },
 });
 

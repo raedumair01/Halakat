@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Switch, Image, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Switch, Image, Alert, ActivityIndicator, Modal, FlatList, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import Svg, { Path, Rect, G, Mask, Defs, ClipPath, Circle } from 'react-native-svg';
-import { fonts } from './fonts';
+import { fonts } from '../constants/fonts';
+import { fetchSurahArabic, fetchSurahList } from '../services/quranApi';
 import {
   useAudioRecorder,
   useAudioRecorderState,
@@ -17,23 +18,149 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const DESIGN_WIDTH = 374;
 const SCALE = SCREEN_WIDTH / DESIGN_WIDTH;
 
-const SURAH_FATIHA = {
-  name: 'الفاتحة',
-  verses: [
-    'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ (١)',
-    'ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَالَمِينَ (٢)',
-    'ٱلرَّحْمَٰنِ ٱلرَّحِيمِ (٣)',
-    'مَٰلِكِ يَوْمِ ٱلدِّينِ (٤)',
-    'إِيَّاكَ نَعْبُدُ وَإِيَّاكَ نَسْتَعِينُ (٥)',
-    'ٱهْدِنَا ٱلصِّرَٰطَ ٱلْمُسْتَقِيمَ (٦)',
-    'صِرَٰطَ ٱلَّذِينَ أَنْعَمْتَ عَلَيْهِمْ غَيْرِ ٱلْمَغْضُوبِ عَلَيْهِمْ وَلَا ٱلضَّآلِّينَ (٧)',
-  ],
-};
-
 // Analysis result type for recording validation
 type AnalysisResult = {
   isValid: boolean;
   reason: 'nothing' | 'wrong' | 'correct';
+  transcript?: string;
+  score?: number;
+};
+
+type SurahAyah = {
+  numberInSurah: number;
+  text: string;
+};
+
+type SurahData = {
+  number: number;
+  name: string;
+  englishName: string;
+  ayahs: SurahAyah[];
+};
+
+type SurahListItem = {
+  number: number;
+  name: string;
+  englishName: string;
+  numberOfAyahs: number;
+};
+
+type SurahListResponse = {
+  surahs: SurahListItem[];
+};
+
+const extractSurahList = (payload: SurahListResponse | SurahListItem[]): SurahListItem[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (payload && Array.isArray(payload.surahs)) {
+    return payload.surahs;
+  }
+
+  return [];
+};
+
+const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const MIN_VALID_DURATION = 1.0;
+const NOTHING_THRESHOLD = 0.5;
+const AYAH_MATCH_THRESHOLD = 0.62;
+const DEFAULT_SURAH_NUMBER = 1;
+
+const normalizeArabicText = (text: string) => {
+  return text
+    .toLowerCase()
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
+    .replace(/\u0640/g, '')
+    .replace(/[إأآٱ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ؤ/g, 'و')
+    .replace(/ئ/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/[\u0660-\u0669\u06F0-\u06F9\d]/g, '')
+    .replace(/[^\u0621-\u063A\u0641-\u064A\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const levenshteinDistance = (a: string, b: string) => {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let i = 0; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 0; j < cols; j += 1) dp[0][j] = j;
+
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return dp[a.length][b.length];
+};
+
+const tokenOverlapScore = (expected: string, actual: string) => {
+  const expectedTokens = expected.split(' ').filter(Boolean);
+  const actualTokens = actual.split(' ').filter(Boolean);
+  if (!expectedTokens.length || !actualTokens.length) return 0;
+
+  const actualSet = new Set(actualTokens);
+  const matchedCount = expectedTokens.filter(token => actualSet.has(token)).length;
+  return matchedCount / expectedTokens.length;
+};
+
+const calculateAyahMatchScore = (expected: string, actual: string) => {
+  if (!expected || !actual) return 0;
+
+  const maxLen = Math.max(expected.length, actual.length);
+  if (!maxLen) return 0;
+
+  const editSimilarity = 1 - levenshteinDistance(expected, actual) / maxLen;
+  const overlap = tokenOverlapScore(expected, actual);
+  return Math.max(0, Math.min(1, 0.65 * editSimilarity + 0.35 * overlap));
+};
+
+const transcribeWithGroq = async (uri: string): Promise<string> => {
+  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
+  if (!apiKey) {
+    throw new Error('Missing EXPO_PUBLIC_GROQ_API_KEY');
+  }
+
+  const fileName = uri.split('/').pop() || 'recitation.m4a';
+  const extension = fileName.split('.').pop()?.toLowerCase() || 'm4a';
+  const mimeType = extension === 'wav' ? 'audio/wav' : 'audio/m4a';
+
+  const body = new FormData();
+  body.append('model', 'whisper-large-v3-turbo');
+  body.append('language', 'ar');
+  body.append('response_format', 'json');
+  body.append('file', {
+    uri,
+    name: fileName,
+    type: mimeType,
+  } as any);
+
+  const response = await fetch(GROQ_TRANSCRIBE_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Transcription failed (${response.status}): ${errorBody}`);
+  }
+
+  const data = await response.json() as { text?: string };
+  return (data.text || '').trim();
 };
 
 function MenuIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: string }) {
@@ -204,12 +331,24 @@ export default function ReciteScreen() {
   const [recordEnabled, setRecordEnabled] = useState(false);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
   const [statusMessage, setStatusMessage] = useState('Tap record to begin reciting.');
+  const [isMicPermissionDenied, setIsMicPermissionDenied] = useState(false);
   const [completedVerses, setCompletedVerses] = useState<Set<number>>(new Set());
+  const [surahData, setSurahData] = useState<SurahData | null>(null);
+  const [surahList, setSurahList] = useState<SurahListItem[]>([]);
+  const [isSurahLoading, setIsSurahLoading] = useState(true);
+  const [surahError, setSurahError] = useState<string | null>(null);
+  const [selectedSurahNumber, setSelectedSurahNumber] = useState(DEFAULT_SURAH_NUMBER);
+  const [isSurahPickerVisible, setIsSurahPickerVisible] = useState(false);
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 500);
-  const currentAyahText = SURAH_FATIHA.verses[currentAyahIndex];
-  const isSurahFinished = completedVerses.size === SURAH_FATIHA.verses.length;
-  const goToNextAyah = () => setCurrentAyahIndex((prev) => (prev + 1) % SURAH_FATIHA.verses.length);
+  const surahAyahs = surahData?.ayahs ?? [];
+  const ayahCount = surahAyahs.length;
+  const currentAyahText = surahAyahs[currentAyahIndex]?.text ?? '';
+  const isSurahFinished = ayahCount > 0 && completedVerses.size === ayahCount;
+  const goToNextAyah = () => {
+    if (ayahCount === 0) return;
+    setCurrentAyahIndex((prev) => (prev + 1) % ayahCount);
+  };
 
   useEffect(() => {
     return () => {
@@ -217,59 +356,134 @@ export default function ReciteScreen() {
     };
   }, [recorder]);
 
-  // Analyze the recorded audio to verify if the verse was recited correctly
+  const loadSurahByNumber = async (surahNumber: number) => {
+    try {
+      setIsSurahLoading(true);
+      const data = await fetchSurahArabic<SurahData>(surahNumber);
+      setSurahData(data);
+      setCurrentAyahIndex(0);
+      setCompletedVerses(new Set());
+      setSurahError(null);
+      setStatusMessage(`Loaded ${data.englishName}. Tap record to begin reciting.`);
+    } catch (error) {
+      console.error('[ReciteScreen] Failed to load surah:', error);
+      setSurahError('Unable to load verses. Please try another surah.');
+      setStatusMessage('Unable to load surah data.');
+    } finally {
+      setIsSurahLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const bootstrapSurahs = async () => {
+      try {
+        const listPayload = await fetchSurahList<SurahListResponse | SurahListItem[]>();
+        const parsedList = extractSurahList(listPayload);
+        setSurahList(parsedList);
+      } catch (error) {
+        console.warn('[ReciteScreen] Failed to load surah list:', error);
+      }
+
+      await loadSurahByNumber(DEFAULT_SURAH_NUMBER);
+    };
+
+    bootstrapSurahs();
+  }, []);
+
+  const handleSurahSelect = async (surahNumber: number) => {
+    setSelectedSurahNumber(surahNumber);
+    setIsSurahPickerVisible(false);
+    await loadSurahByNumber(surahNumber);
+  };
+
+  const recheckMicrophonePermission = async () => {
+    try {
+      const permission = await requestRecordingPermissionsAsync();
+      if (permission.status === 'granted') {
+        setIsMicPermissionDenied(false);
+        setStatusMessage('Microphone permission granted. You can start recording now.');
+        return;
+      }
+
+      setIsMicPermissionDenied(true);
+      Alert.alert(
+        'Microphone access needed',
+        'Please allow microphone access in Settings to continue recording recitation.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          {
+            text: 'Open Settings',
+            onPress: () => {
+              Linking.openSettings().catch(() => {});
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.warn('[ReciteScreen] Failed to re-check microphone permission:', error);
+      setStatusMessage('Could not check microphone permission. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (currentAyahIndex >= ayahCount && ayahCount > 0) {
+      setCurrentAyahIndex(0);
+    }
+  }, [currentAyahIndex, ayahCount]);
+
+  // Analyze the recorded audio to verify if the verse was recited correctly.
   const analyzeRecording = async (uri: string, ayahIndex: number, durationSeconds: number): Promise<AnalysisResult> => {
     try {
       console.log('[ReciteScreen] Analyzing recording for Ayah', ayahIndex + 1);
       console.log('[ReciteScreen] Recording URI:', uri);
       console.log('[ReciteScreen] Recording duration:', durationSeconds.toFixed(2), 'seconds');
-      
-      // Thresholds for detection
-      const NOTHING_THRESHOLD = 0.5; // Less than 0.5s = nothing recited (increased from 0.3s)
-      const MIN_VALID_DURATION = 1.0; // At least 1.0s for valid recitation (increased from 0.5s)
-      
-      // Check if nothing was recited (silence or very short)
+
       if (durationSeconds < NOTHING_THRESHOLD) {
-        console.log('[ReciteScreen] Recording too short - nothing recited (', durationSeconds.toFixed(2), 's < ', NOTHING_THRESHOLD, 's)');
+        console.log('[ReciteScreen] Recording too short - nothing recited');
         return { isValid: false, reason: 'nothing' };
       }
-      
-      // Check if recording is too short to be meaningful
+
       if (durationSeconds < MIN_VALID_DURATION) {
-        console.log('[ReciteScreen] Recording too short to be valid recitation (', durationSeconds.toFixed(2), 's < ', MIN_VALID_DURATION, 's)');
+        console.log('[ReciteScreen] Recording too short to be meaningful recitation');
         return { isValid: false, reason: 'nothing' };
       }
-      
-      // TODO: Integrate speech-to-text API here for actual verification
-      // In production, you would:
-      // 1. Send the audio file to a transcription service (e.g., Google Speech-to-Text, Azure Speech)
-      // 2. Compare the transcribed text with the expected Arabic verse (SURAH_FATIHA.verses[ayahIndex])
-      // 3. Return { isValid: true, reason: 'correct' } if the transcription matches
-      // 4. Return { isValid: false, reason: 'wrong' } if transcription doesn't match
-      
-      // For now, we'll use a simple heuristic:
-      // - Very short recordings are considered "nothing"
-      // - Longer recordings that pass duration check are considered "correct" for now
-      // - In production, replace this with actual speech-to-text comparison
-      
-      // Simulate analysis delay (remove in production when using real API)
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      // Placeholder: For demo purposes, accept recordings >= 0.5s as correct
-      // In production, this should be replaced with actual transcription matching
-      // If transcription doesn't match expected verse, return { isValid: false, reason: 'wrong' }
-      
-      console.log('[ReciteScreen] Recording analysis complete - accepted as correct');
-      return { isValid: true, reason: 'correct' };
+
+      const expectedAyahText = surahAyahs[ayahIndex]?.text;
+      if (!expectedAyahText) {
+        console.warn('[ReciteScreen] No expected ayah found for index', ayahIndex);
+        return { isValid: false, reason: 'wrong' };
+      }
+
+      const transcript = await transcribeWithGroq(uri);
+      const normalizedTranscript = normalizeArabicText(transcript);
+      const normalizedExpectedAyah = normalizeArabicText(expectedAyahText);
+      const score = calculateAyahMatchScore(normalizedExpectedAyah, normalizedTranscript);
+
+      console.log('[ReciteScreen] Transcript:', transcript);
+      console.log('[ReciteScreen] Normalized transcript:', normalizedTranscript);
+      console.log('[ReciteScreen] Ayah match score:', score.toFixed(3));
+
+      if (!normalizedTranscript || normalizedTranscript.length < 2) {
+        return { isValid: false, reason: 'nothing', transcript, score };
+      }
+
+      if (score >= AYAH_MATCH_THRESHOLD) {
+        return { isValid: true, reason: 'correct', transcript, score };
+      }
+
+      return { isValid: false, reason: 'wrong', transcript, score };
     } catch (error) {
       console.warn('[ReciteScreen] Error analyzing recording:', error);
-      // If there's an error in analysis, assume it's wrong (not nothing, since we have audio)
       return { isValid: false, reason: 'wrong' };
     }
   };
 
   const handleRecordToggle = async (value: boolean) => {
     if (value) {
+      if (ayahCount === 0 || !!surahError || isSurahLoading) {
+        setStatusMessage('Verses are not ready yet. Please wait.');
+        return;
+      }
       console.log('[ReciteScreen] Record toggle ON – starting recorder');
        setStatusMessage(`Recording Ayah ${currentAyahIndex + 1}...`);
       const success = await startRecording();
@@ -288,9 +502,23 @@ export default function ReciteScreen() {
     try {
       const permission = await requestRecordingPermissionsAsync();
       if (permission.status !== 'granted') {
-        Alert.alert('Permission required', 'Microphone access is needed to start reciting.');
+        setIsMicPermissionDenied(true);
+        Alert.alert(
+          'Permission required',
+          'Microphone access is needed to start reciting.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => {
+                Linking.openSettings().catch(() => {});
+              },
+            },
+          ]
+        );
         return false;
       }
+      setIsMicPermissionDenied(false);
       await setAudioModeAsync({
         allowsRecording: true,
         playsInSilentMode: true,
@@ -340,7 +568,7 @@ export default function ReciteScreen() {
         setCompletedVerses(prev => {
           const newSet = new Set(prev);
           newSet.add(currentAyahIndex);
-          const allVersesCompleted = newSet.size === SURAH_FATIHA.verses.length;
+          const allVersesCompleted = newSet.size === ayahCount;
           
           console.log('[ReciteScreen] Completed verses:', Array.from(newSet).sort((a, b) => a - b));
           
@@ -349,8 +577,8 @@ export default function ReciteScreen() {
             setStatusMessage('🎉 Surah finished! All verses recited successfully.');
           } else {
             // Move to next ayah
-            const nextIndex = (currentAyahIndex + 1) % SURAH_FATIHA.verses.length;
-            const progress = `${newSet.size}/${SURAH_FATIHA.verses.length}`;
+            const nextIndex = ayahCount > 0 ? (currentAyahIndex + 1) % ayahCount : 0;
+            const progress = `${newSet.size}/${ayahCount}`;
             console.log('[ReciteScreen] Recording accepted! Advancing to next ayah. Progress:', progress);
             setStatusMessage(`✓ Ayah ${currentAyahIndex + 1} completed! (${progress}) Moving to Ayah ${nextIndex + 1}.`);
             // Use setTimeout to ensure state update completes before navigation
@@ -368,7 +596,10 @@ export default function ReciteScreen() {
           setStatusMessage(`Nothing recited. Please recite Ayah ${currentAyahIndex + 1} clearly.`);
         } else if (analysisResult.reason === 'wrong') {
           console.log('[ReciteScreen] Wrongly recited - recording does not match expected verse');
-          setStatusMessage(`Wrongly recited. Please recite Ayah ${currentAyahIndex + 1} correctly.`);
+          const matchInfo = typeof analysisResult.score === 'number'
+            ? ` (match ${(analysisResult.score * 100).toFixed(0)}%)`
+            : '';
+          setStatusMessage(`Wrongly recited${matchInfo}. Please recite Ayah ${currentAyahIndex + 1} correctly.`);
         } else {
           console.log('[ReciteScreen] Recording analysis failed - verse not accepted.');
           setStatusMessage(`Recitation not recognized. Please try reciting Ayah ${currentAyahIndex + 1} again.`);
@@ -426,13 +657,24 @@ export default function ReciteScreen() {
                   <ReadQuranIcon />
                   <Text style={styles.readQuranLabel}>Select Ayah</Text>
                 </View>
-                <Text style={styles.readQuranSurah}>Al-Fatihah</Text>
-                <Text style={styles.readQuranAyah}>{`Ayah No: ${currentAyahIndex + 1} / ${SURAH_FATIHA.verses.length}`}</Text>
+                <Text style={styles.readQuranSurah}>{surahData?.englishName || 'Loading...'}</Text>
+                <Text style={styles.readQuranAyah}>{`Ayah No: ${ayahCount ? currentAyahIndex + 1 : 0} / ${ayahCount}`}</Text>
               </View>
               <View style={styles.readQuranIllustration}>
                 <QuranIllustration />
               </View>
             </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.surahPickerButton}
+            onPress={() => setIsSurahPickerVisible(true)}
+            disabled={isSurahLoading || recordEnabled}
+          >
+            <Text style={styles.surahPickerButtonLabel}>Choose Surah</Text>
+            <Text style={styles.surahPickerButtonValue}>
+              {surahData ? `${surahData.englishName} (${surahData.name})` : 'Loading...'} ▼
+            </Text>
           </TouchableOpacity>
 
           {/* Toggle Row */}
@@ -453,23 +695,35 @@ export default function ReciteScreen() {
                 onValueChange={handleRecordToggle}
                 trackColor={{ false: '#D6D9DC', true: '#F28C8C' }}
                 thumbColor="#FFFFFF"
-                disabled={isSurahFinished}
+                disabled={isSurahFinished || isSurahLoading || !!surahError}
               />
             </View>
           </View>
+          {isSurahLoading && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator size="small" color="#0F6A4C" />
+              <Text style={styles.loadingRowText}>Loading verses from API...</Text>
+            </View>
+          )}
+          {!!surahError && <Text style={styles.errorMessage}>{surahError}</Text>}
           <Text style={styles.statusMessage}>{statusMessage}</Text>
+          {isMicPermissionDenied && (
+            <TouchableOpacity style={styles.permissionButton} onPress={recheckMicrophonePermission}>
+              <Text style={styles.permissionButtonText}>Re-check Microphone Permission</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Arabic Verse */}
           {showVerses && (
             <View style={styles.ayahContainer}>
               <Text style={styles.ayahTitle}>
-                {SURAH_FATIHA.name} <Text style={styles.ayahCaret}>∨</Text>
+                {surahData?.name || '...'} <Text style={styles.ayahCaret}>∨</Text>
               </Text>
-              <Text style={styles.ayahText}>{currentAyahText}</Text>
+              <Text style={styles.ayahText}>{currentAyahText || 'No ayah loaded.'}</Text>
               {/* Progress indicator */}
               <View style={styles.progressContainer}>
                 <Text style={styles.progressText}>
-                  Progress: {completedVerses.size} / {SURAH_FATIHA.verses.length} verses completed
+                  Progress: {completedVerses.size} / {ayahCount} verses completed
                 </Text>
               </View>
             </View>
@@ -480,7 +734,7 @@ export default function ReciteScreen() {
             <View style={styles.completionContainer}>
               <Text style={styles.completionTitle}>🎉 Surah Finished!</Text>
               <Text style={styles.completionMessage}>
-                Congratulations! You have successfully recited all {SURAH_FATIHA.verses.length} verses of {SURAH_FATIHA.name}.
+                Congratulations! You have successfully recited all {ayahCount} verses of {surahData?.name || 'this surah'}.
               </Text>
             </View>
           )}
@@ -519,6 +773,47 @@ export default function ReciteScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <Modal
+        visible={isSurahPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsSurahPickerVisible(false)}
+      >
+        <View style={styles.surahPickerBackdrop}>
+          <TouchableOpacity style={styles.surahPickerBackdropTouchable} onPress={() => setIsSurahPickerVisible(false)} />
+          <View style={styles.surahPickerSheet}>
+            <Text style={styles.surahPickerTitle}>Select Surah to Recite</Text>
+            <FlatList
+              data={surahList}
+              keyExtractor={(item) => item.number.toString()}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.surahPickerItem,
+                    item.number === selectedSurahNumber && styles.surahPickerItemActive,
+                  ]}
+                  onPress={() => handleSurahSelect(item.number)}
+                >
+                  <View>
+                    <Text style={styles.surahPickerItemName}>
+                      {item.number}. {item.englishName}
+                    </Text>
+                    <Text style={styles.surahPickerItemMeta}>{item.numberOfAyahs} ayahs</Text>
+                  </View>
+                  <Text style={styles.surahPickerItemArabic}>{item.name}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <View style={styles.surahPickerEmpty}>
+                  <Text style={styles.surahPickerEmptyText}>No surahs found.</Text>
+                </View>
+              }
+            />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -697,6 +992,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  surahPickerButton: {
+    marginBottom: 16 * SCALE,
+    borderRadius: 14 * SCALE,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#F8FAF9',
+    paddingVertical: 10 * SCALE,
+    paddingHorizontal: 14 * SCALE,
+  },
+  surahPickerButtonLabel: {
+    fontSize: 12 * SCALE,
+    color: '#6B7280',
+    fontFamily: fonts.medium,
+    marginBottom: 2 * SCALE,
+  },
+  surahPickerButtonValue: {
+    fontSize: 14 * SCALE,
+    color: '#0B3727',
+    fontFamily: fonts.semiBold,
+  },
   toggleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -733,6 +1048,7 @@ const styles = StyleSheet.create({
     fontSize: 22 * SCALE,
     lineHeight: 34 * SCALE,
     color: '#0B0E17',
+    fontFamily: fonts.arabicQuran,
   },
   micWrapper: {
     alignItems: 'center',
@@ -792,6 +1108,36 @@ const styles = StyleSheet.create({
     fontSize: 14 * SCALE,
     color: '#6F7D75',
     marginBottom: 16 * SCALE,
+  },
+  permissionButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 12 * SCALE,
+    paddingVertical: 8 * SCALE,
+    paddingHorizontal: 12 * SCALE,
+    borderRadius: 12 * SCALE,
+    backgroundColor: '#0F6A4C',
+  },
+  permissionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13 * SCALE,
+    fontFamily: fonts.semiBold,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8 * SCALE,
+    marginBottom: 8 * SCALE,
+  },
+  loadingRowText: {
+    fontSize: 13 * SCALE,
+    color: '#6F7D75',
+    fontFamily: fonts.medium,
+  },
+  errorMessage: {
+    fontSize: 13 * SCALE,
+    color: '#DC2626',
+    marginBottom: 8 * SCALE,
+    fontFamily: fonts.medium,
   },
   progressContainer: {
     marginTop: 16 * SCALE,
@@ -853,6 +1199,70 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16 * SCALE,
     fontWeight: '600',
+  },
+  surahPickerBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    justifyContent: 'flex-end',
+  },
+  surahPickerBackdropTouchable: {
+    flex: 1,
+  },
+  surahPickerSheet: {
+    maxHeight: '70%',
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24 * SCALE,
+    borderTopRightRadius: 24 * SCALE,
+    paddingHorizontal: 16 * SCALE,
+    paddingTop: 14 * SCALE,
+    paddingBottom: 20 * SCALE,
+  },
+  surahPickerTitle: {
+    fontSize: 17 * SCALE,
+    color: '#0B3727',
+    fontFamily: fonts.semiBold,
+    marginBottom: 12 * SCALE,
+  },
+  surahPickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 12 * SCALE,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 12 * SCALE,
+    paddingVertical: 10 * SCALE,
+    marginBottom: 8 * SCALE,
+    backgroundColor: '#FFFFFF',
+  },
+  surahPickerItemActive: {
+    borderColor: '#0F6A4C',
+    backgroundColor: '#ECFDF5',
+  },
+  surahPickerItemName: {
+    fontSize: 14 * SCALE,
+    color: '#111827',
+    fontFamily: fonts.semiBold,
+  },
+  surahPickerItemMeta: {
+    marginTop: 2 * SCALE,
+    fontSize: 12 * SCALE,
+    color: '#6B7280',
+    fontFamily: fonts.regular,
+  },
+  surahPickerItemArabic: {
+    fontSize: 15 * SCALE,
+    color: '#0B3727',
+    fontFamily: fonts.arabicQuran,
+  },
+  surahPickerEmpty: {
+    paddingVertical: 24 * SCALE,
+    alignItems: 'center',
+  },
+  surahPickerEmptyText: {
+    fontSize: 14 * SCALE,
+    color: '#6B7280',
+    fontFamily: fonts.medium,
   },
 });
 

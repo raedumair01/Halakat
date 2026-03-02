@@ -1,12 +1,48 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import Svg, { Rect, G, Path, Defs, ClipPath } from 'react-native-svg';
-import { fonts } from './fonts';
+import { fonts } from '../constants/fonts';
+import { hasActiveSession } from '../services/authSession';
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const bootstrapSession = async () => {
+      try {
+        const activeSession = await hasActiveSession();
+        if (activeSession) {
+          router.replace('/(tabs)/home');
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to read auth session:', error);
+      } finally {
+        if (isMounted) {
+          setCheckingSession(false);
+        }
+      }
+    };
+
+    bootstrapSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
+
+  if (checkingSession) {
+    return (
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#0F3A2B" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -193,6 +229,12 @@ function OnboardingIllustration() {
 }
 
 const styles = StyleSheet.create({
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     justifyContent: 'center',

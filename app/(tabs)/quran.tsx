@@ -5,8 +5,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Path, Rect, G, Defs, ClipPath, Circle } from 'react-native-svg';
-import { fonts } from '../fonts';
-import { fetchFullQuran } from '../services/quranApi';
+import { fonts } from '../../constants/fonts';
+import { fetchFullQuran, fetchJuz } from '../../services/quranApi';
 
 type Surah = {
   number: number;
@@ -28,22 +28,29 @@ type QuranData = {
   surahs: Surah[];
 };
 
-type TabType = 'Surah' | 'Para' | 'Page' | 'Hijb';
+type TabType = 'Surah' | 'Para';
 
 type ParaData = {
   number: number;
   surahs: Array<{ surah: Surah; startAyah: number; endAyah: number }>;
 };
 
-type PageData = {
+type ParaSummary = {
   number: number;
-  surahs: Array<{ surah: Surah; ayahs: number[] }>;
+  surahCount: number;
 };
 
-type HizbData = {
+type JuzResponse = {
   number: number;
-  surahs: Array<{ surah: Surah; ayahs: number[] }>;
+  ayahs: Array<{
+    numberInSurah: number;
+    juz: number | string;
+    surah: {
+      number: number;
+    };
+  }>;
 };
+
 
 function MenuIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: string }) {
   return (
@@ -167,9 +174,13 @@ export default function QuranTab() {
   const [quranData, setQuranData] = useState<QuranData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [paraSummaries, setParaSummaries] = useState<ParaSummary[]>([]);
+  const [paraLoading, setParaLoading] = useState(true);
+  const [paraError, setParaError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchQuranData();
+    fetchParaData();
   }, []);
 
   const fetchQuranData = async () => {
@@ -183,6 +194,51 @@ export default function QuranTab() {
       console.error('Error fetching Quran data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchParaData = async () => {
+    try {
+      setParaLoading(true);
+      const summaries: ParaSummary[] = [];
+      const failedParas: number[] = [];
+
+      for (let paraNumber = 1; paraNumber <= 30; paraNumber += 1) {
+        try {
+          const juzPayload = await fetchJuz<JuzResponse>(paraNumber);
+          const surahNumbers = new Set<number>();
+          juzPayload.ayahs.forEach((ayah) => {
+            if (ayah?.surah?.number) {
+              surahNumbers.add(ayah.surah.number);
+            }
+          });
+
+          summaries.push({
+            number: paraNumber,
+            surahCount: surahNumbers.size,
+          });
+        } catch {
+          failedParas.push(paraNumber);
+          summaries.push({
+            number: paraNumber,
+            surahCount: 0,
+          });
+        }
+      }
+
+      const sorted = summaries.sort((a, b) => a.number - b.number);
+      setParaSummaries(sorted);
+
+      if (failedParas.length > 0) {
+        setParaError(`Some paras failed to load from API: ${failedParas.join(', ')}`);
+      } else {
+        setParaError(null);
+      }
+    } catch (err) {
+      setParaError(err instanceof Error ? err.message : 'Failed to load para list');
+      console.error('Error fetching para data:', err);
+    } finally {
+      setParaLoading(false);
     }
   };
 
@@ -215,65 +271,6 @@ export default function QuranTab() {
     return Object.values(paras).sort((a, b) => a.number - b.number);
   };
 
-  // Organize data by Page
-  const organizeByPage = (): PageData[] => {
-    if (!quranData) return [];
-    
-    const pages: { [key: number]: PageData } = {};
-    
-    quranData.surahs.forEach(surah => {
-      surah.ayahs.forEach(ayah => {
-        const page = ayah.page;
-        if (!pages[page]) {
-          pages[page] = { number: page, surahs: [] };
-        }
-        
-        const existingSurah = pages[page].surahs.find(s => s.surah.number === surah.number);
-        if (!existingSurah) {
-          pages[page].surahs.push({
-            surah,
-            ayahs: [ayah.numberInSurah],
-          });
-        } else {
-          if (!existingSurah.ayahs.includes(ayah.numberInSurah)) {
-            existingSurah.ayahs.push(ayah.numberInSurah);
-          }
-        }
-      });
-    });
-    
-    return Object.values(pages).sort((a, b) => a.number - b.number);
-  };
-
-  // Organize data by Hizb
-  const organizeByHizb = (): HizbData[] => {
-    if (!quranData) return [];
-    
-    const hizbs: { [key: number]: HizbData } = {};
-    
-    quranData.surahs.forEach(surah => {
-      surah.ayahs.forEach(ayah => {
-        const hizb = ayah.hizbQuarter;
-        if (!hizbs[hizb]) {
-          hizbs[hizb] = { number: hizb, surahs: [] };
-        }
-        
-        const existingSurah = hizbs[hizb].surahs.find(s => s.surah.number === surah.number);
-        if (!existingSurah) {
-          hizbs[hizb].surahs.push({
-            surah,
-            ayahs: [ayah.numberInSurah],
-          });
-        } else {
-          if (!existingSurah.ayahs.includes(ayah.numberInSurah)) {
-            existingSurah.ayahs.push(ayah.numberInSurah);
-          }
-        }
-      });
-    });
-    
-    return Object.values(hizbs).sort((a, b) => a.number - b.number);
-  };
 
   const filteredSurahs = quranData?.surahs.filter(surah => 
     surah.englishName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -285,6 +282,13 @@ export default function QuranTab() {
     router.push({
       pathname: '/surah-detail',
       params: { surahNumber: surah.number.toString() },
+    });
+  };
+
+  const handleParaPress = (paraNumber: number) => {
+    router.push({
+      pathname: '/para-detail' as any,
+      params: { paraNumber: paraNumber.toString() },
     });
   };
 
@@ -334,36 +338,46 @@ export default function QuranTab() {
   };
 
   const renderParaList = () => {
-    if (loading) {
+    if (paraLoading) {
       return (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#059669" />
-          <Text style={styles.loadingText}>Loading Quran...</Text>
+          <Text style={styles.loadingText}>Loading paras...</Text>
         </View>
       );
     }
 
-    if (error || !quranData) {
+    if (paraError && paraSummaries.every((item) => item.surahCount === 0)) {
       return (
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error || 'No data available'}</Text>
+          <Text style={styles.errorText}>{paraError}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchParaData}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       );
     }
-
-    const paras = organizeByPara();
 
     return (
       <>
-        <Text style={styles.sectionTitle}>All Paras ({paras.length})</Text>
-        {paras.map((para) => (
-          <TouchableOpacity key={para.number} style={styles.surahItem}>
+        <Text style={styles.sectionTitle}>All Paras ({paraSummaries.length})</Text>
+        {!!paraError && (
+          <Text style={styles.partialWarningText}>{paraError}</Text>
+        )}
+        {paraSummaries.map((para) => (
+          <TouchableOpacity
+            key={para.number}
+            style={styles.surahItem}
+            onPress={() => handleParaPress(para.number)}
+          >
             <StarNumberIcon number={para.number} />
             
             <View style={styles.surahInfo}>
               <Text style={styles.surahName}>Para {para.number}</Text>
                 <Text style={styles.surahDetails}>
-                {para.surahs.length} {para.surahs.length === 1 ? 'Surah' : 'Surahs'}
+                {para.surahCount > 0
+                  ? `${para.surahCount} ${para.surahCount === 1 ? 'Surah' : 'Surahs'}`
+                  : 'Tap to load from API'}
                 </Text>
               </View>
           </TouchableOpacity>
@@ -372,83 +386,6 @@ export default function QuranTab() {
     );
   };
 
-  const renderPageList = () => {
-    if (loading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
-          <Text style={styles.loadingText}>Loading Quran...</Text>
-        </View>
-      );
-    }
-
-    if (error || !quranData) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error || 'No data available'}</Text>
-        </View>
-      );
-    }
-
-    const pages = organizeByPage();
-
-    return (
-      <>
-        <Text style={styles.sectionTitle}>All Pages ({pages.length})</Text>
-        {pages.map((page) => (
-          <TouchableOpacity key={page.number} style={styles.surahItem}>
-            <StarNumberIcon number={page.number} />
-            
-            <View style={styles.surahInfo}>
-              <Text style={styles.surahName}>Page {page.number}</Text>
-              <Text style={styles.surahDetails}>
-                {page.surahs.length} {page.surahs.length === 1 ? 'Surah' : 'Surahs'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </>
-    );
-  };
-
-  const renderHizbList = () => {
-    if (loading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
-          <Text style={styles.loadingText}>Loading Quran...</Text>
-        </View>
-      );
-    }
-
-    if (error || !quranData) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error || 'No data available'}</Text>
-        </View>
-      );
-    }
-
-    const hizbs = organizeByHizb();
-
-    return (
-      <>
-        <Text style={styles.sectionTitle}>All Hizbs ({hizbs.length})</Text>
-        {hizbs.map((hizb) => (
-          <TouchableOpacity key={hizb.number} style={styles.surahItem}>
-            <StarNumberIcon number={hizb.number} />
-            
-            <View style={styles.surahInfo}>
-              <Text style={styles.surahName}>Hizb {hizb.number}</Text>
-              <Text style={styles.surahDetails}>
-                {hizb.surahs.length} {hizb.surahs.length === 1 ? 'Surah' : 'Surahs'}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </>
-    );
-  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -497,7 +434,7 @@ export default function QuranTab() {
 
           {/* Tabs */}
           <View style={styles.tabsContainer}>
-            {(['Surah', 'Para', 'Page', 'Hijb'] as TabType[]).map((tab) => (
+            {(['Surah', 'Para'] as TabType[]).map((tab) => (
               <TouchableOpacity
                 key={tab}
                 style={[styles.tab, activeTab === tab && styles.tabActive]}
@@ -514,8 +451,6 @@ export default function QuranTab() {
           <View style={styles.surahList}>
             {activeTab === 'Surah' && renderSurahList()}
             {activeTab === 'Para' && renderParaList()}
-            {activeTab === 'Page' && renderPageList()}
-            {activeTab === 'Hijb' && renderHizbList()}
           </View>
         </View>
       </ScrollView>
@@ -713,7 +648,7 @@ const styles = StyleSheet.create({
   surahArabic: {
     fontSize: 18,
     color: '#0F3A2B',
-    fontFamily: fonts.regular,
+    fontFamily: fonts.arabicQuran,
   },
   surahDetails: {
     fontSize: 14,
@@ -743,6 +678,12 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     textAlign: 'center',
     marginBottom: 16,
+  },
+  partialWarningText: {
+    color: '#B45309',
+    fontSize: 12,
+    marginBottom: 10,
+    fontFamily: fonts.medium,
   },
   retryButton: {
     backgroundColor: '#059669',

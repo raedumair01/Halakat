@@ -33,6 +33,30 @@ export function fetchSurahArabic<T>(surahNumber: string | number): Promise<T> {
   return fetchFromApi<T>(`/surah/${surahNumber}/ar.alafasy`, 'Failed to fetch surah data');
 }
 
+export function fetchSurahList<T>(): Promise<T> {
+  return fetchFromApi<T>('/surah', 'Failed to fetch surah list');
+}
+
+export function fetchJuz<T>(juzNumber: string | number): Promise<T> {
+  const endpoints = [
+    `/juz/${juzNumber}/quran-uthmani`,
+    `/juz/${juzNumber}/ar.alafasy`,
+    `/juz/${juzNumber}`,
+  ];
+
+  return (async () => {
+    for (const endpoint of endpoints) {
+      try {
+        return await fetchFromApi<T>(endpoint, 'Failed to fetch juz data');
+      } catch {
+        // try next endpoint variant
+      }
+    }
+
+    throw new Error('Failed to fetch juz data');
+  })();
+}
+
 // Get available translations from QuranEnc
 export function fetchAvailableTranslations<T>(): Promise<T> {
   return fetchFromQuranEncApi<T>('/translations/list', 'Failed to fetch available translations');

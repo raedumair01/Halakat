@@ -1,6 +1,8 @@
-import { Tabs } from 'expo-router';
-import React from 'react';
+import { Tabs, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, View } from 'react-native';
 import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
+import { hasActiveSession } from '../../services/authSession';
 
 // Home Icon - Teal/Greenish-blue (#588B76)
 function HomeIcon({ size = 24, color = '#588B76' }: { size?: number; color?: string }) {
@@ -73,37 +75,91 @@ function SupplicationIcon({ size = 24, color = '#8789A3' }: { size?: number; col
   );
 }
 
-// Bookmark Icon - Purple-grey (#8789A3)
-function BookmarkIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: string }) {
+// Chat Icon (Speech bubble with question mark) - Teal/Greenish-blue (#588B76)
+function ChatIcon({ size = 24, color = '#588B76' }: { size?: number; color?: string }) {
   return (
-    <Svg width={size} height={size} viewBox="299.6 4 18.666 24" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M318.266 28L308.933 21.3333L299.6 28V6.66667C299.6 5.95942 299.881 5.28115 300.381 4.78105C300.881 4.28095 301.559 4 302.266 4H315.6C316.307 4 316.985 4.28095 317.485 4.78105C317.985 5.28115 318.266 5.95942 318.266 6.66667V28Z"
+        d="M5 20L5.01 16.5C3.28 15.39 2.25 13.77 2.25 12C2.25 8.54822 5.60754 5.75 9.75 5.75C13.8925 5.75 17.25 8.54822 17.25 12C17.25 15.4518 13.8925 18.25 9.75 18.25C8.82989 18.25 7.95134 18.1156 7.14062 17.8698L5 20Z"
         stroke={color}
-        strokeWidth="2"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9.75 9.5C10.8546 9.5 11.75 10.2319 11.75 11.125C11.75 11.7377 11.3717 12.1941 10.7806 12.4183C10.2109 12.6351 9.75 13.0729 9.75 13.625V13.75"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M9.75 15.75H9.755"
+        stroke={color}
+        strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
     </Svg>
   );
 }
-
 export default function TabLayout() {
+  const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const guardSession = async () => {
+      try {
+        const activeSession = await hasActiveSession();
+        if (!activeSession) {
+          router.replace('/auth');
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to validate auth session:', error);
+        router.replace('/auth');
+        return;
+      } finally {
+        if (isMounted) {
+          setCheckingSession(false);
+        }
+      }
+    };
+
+    guardSession();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
+
+  if (checkingSession) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
+        <ActivityIndicator size="large" color="#0F3A2B" />
+      </View>
+    );
+  }
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#588B76', // Teal for active (first tab) / #8789A3 for others
         tabBarInactiveTintColor: '#8789A3', // Purple-grey for inactive
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: '#FFFFFF',
           borderTopColor: '#E5E7EB',
           borderTopWidth: 1,
           paddingTop: 8,
-          paddingBottom: 4,
-          height: 60,
-          position: 'absolute',
-          bottom: 0,
+          paddingBottom: Platform.OS === 'ios' ? 14 : 6,
+          height: Platform.OS === 'ios' ? 86 : 64,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -158,11 +214,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="bookmarks"
+        name="ask"
         options={{
-          title: 'Saved',
+          title: 'Ask',
           tabBarIcon: ({ focused, size }) => (
-            <BookmarkIcon size={size} color={focused ? '#059669' : '#8789A3'} />
+            <ChatIcon size={size} color={focused ? '#588B76' : '#8789A3'} />
           ),
         }}
       />

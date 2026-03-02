@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Search, Share2, Play, Bookmark } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
-import { fonts } from './fonts';
-import { fetchSurahArabic, fetchSurahTranslation, findHafizSalahuddinTranslationKey, getUrduTranslationKey, findArabicTextKey, fetchSurahArabicFromQuranEnc } from './services/quranApi';
+import { fonts } from '../constants/fonts';
+import { fetchSurahArabic, fetchSurahTranslation, findHafizSalahuddinTranslationKey, getUrduTranslationKey, findArabicTextKey, fetchSurahArabicFromQuranEnc } from '../services/quranApi';
 
 type Ayah = {
   number: number;
@@ -50,6 +50,8 @@ export default function SurahDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const surahNumber = params.surahNumber as string;
+  const startAyahParam = Array.isArray(params.startAyah) ? params.startAyah[0] : params.startAyah;
+  const startAyah = Math.max(1, Number(startAyahParam || 1));
   const [surah, setSurah] = useState<Surah | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -340,6 +342,11 @@ export default function SurahDetailScreen() {
     }
   };
 
+  const visibleAyahs = useMemo(
+    () => (surah ? surah.ayahs.filter((ayah) => ayah.numberInSurah >= startAyah) : []),
+    [surah, startAyah]
+  );
+  
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -400,7 +407,10 @@ export default function SurahDetailScreen() {
                 <Text style={styles.bannerMeta}>
                   {surah.revelationType.toUpperCase()} • {totalAyahs} VERSES
                 </Text>
-                {parseInt(surahNumber) !== 9 && (
+                {startAyah > 1 && (
+                  <Text style={styles.startAyahInfo}>Starting from Ayah {startAyah}</Text>
+                )}
+                {parseInt(surahNumber) !== 9 && startAyah <= 1 && (
                   <View style={styles.bismillahContainer}>
                     <BismillahSVG />
                   </View>
@@ -412,7 +422,7 @@ export default function SurahDetailScreen() {
 
         {/* Verses List */}
         <View style={styles.versesContainer}>
-          {surah.ayahs.map((ayah, index) => (
+          {visibleAyahs.map((ayah, index) => (
             <View key={ayah.number} style={styles.verseCard}>
               {/* White Header Bar */}
               <View style={styles.verseHeaderBar}>
@@ -450,7 +460,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   content: {
-    paddingBottom: 20,
+    paddingBottom: 28,
   },
   loadingContainer: {
     flex: 1,
@@ -523,12 +533,12 @@ const styles = StyleSheet.create({
   },
   banner: {
     borderRadius: 20,
-    width: 390,
-    height: 257,
+    width: '100%',
+    aspectRatio: 390 / 257,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#D0DED8',
-    opacity:1,
+    opacity: 1,
   },
   bannerBackgroundImage: {
     position: 'absolute',
@@ -583,6 +593,14 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textAlign: 'center',
     marginBottom: 0,
+    fontFamily: fonts.medium,
+  },
+  startAyahInfo: {
+    marginTop: 8,
+    color: '#FFFFFF',
+    opacity: 0.95,
+    fontSize: 12,
+    textAlign: 'center',
     fontFamily: fonts.medium,
   },
   bismillahContainer: {
@@ -651,19 +669,20 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   verseArabic: {
-    fontSize: 24,
+    fontSize: 18,
     color: '#0F3A2B',
-    lineHeight: 36,
-    marginBottom: 12,
+    lineHeight: 37,
+    marginBottom: 10,
     textAlign: 'right',
-    fontFamily: fonts.medium,
+    fontFamily: fonts.arabicQuran,
   },
   verseTranslation: {
     fontSize: 14,
     color: '#6B7280',
-    lineHeight: 20,
+    lineHeight: 30,
     textAlign: 'left',
     fontFamily: fonts.regular,
+    bottom: -10,
   },
 });
 

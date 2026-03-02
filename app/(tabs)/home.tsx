@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { fonts } from '../fonts';
+import { fonts } from '../../constants/fonts';
 import Svg, {
   Path,
   Rect,
@@ -27,7 +27,7 @@ type FeatureCardProps = {
 const features: FeatureCardProps[] = [
   { title: 'Memorize', colors: ['#E8F7E9', '#F8FFF6'], Illustration: MemorizeIcon },
   { title: 'Recite', colors: ['#FFEAE4', '#FFF6F3'], Illustration: ReciteIcon },
-  { title: 'Retain', colors: ['#FFF3E3', '#FFF9F0'], Illustration: RetainIcon },
+  { title: 'Retain', colors: ['#FFF3E3', '#FFF9F0'], Illustration: OldReciteIcon },
   { title: 'Track', colors: ['#EEF4FF', '#F8FBFF'], Illustration: TrackIcon },
 ];
 
@@ -39,6 +39,7 @@ const HERO_CURVE_TRANSFORM = {
   bottomOffset: -20,      // Distance from bottom (higher = more from bottom)
   scale: 1.0,
 };
+
 
 function MenuIcon({ size = 24, color = "#8789A3" }: { size?: number; color?: string }) {
   return (
@@ -271,7 +272,7 @@ function MemorizeIcon() {
   );
 }
 
-function ReciteIcon() {
+function OldReciteIcon() {
   return (
     <Svg width={68} height={94} viewBox="0 0 68 94" fill="none">
       <Rect y={10.4615} width={68} height={83.1692} rx={7} fill="#0B4F47" fillOpacity={0.11} />
@@ -314,6 +315,17 @@ function RetainIcon() {
     </Svg>
   );
 }
+
+function ReciteIcon() {
+  return (
+    <RNImage
+      source={require('../../assets/images/recite.png')}
+      style={{ width: 53, height: 82 }}
+      resizeMode="contain"
+    />
+  );
+}
+
 
 function TrackIcon() {
   return (
@@ -386,7 +398,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 4,
     left:30,
-    fontFamily: fonts.semiBold,
+    fontFamily: fonts.arabicQuran,
   },
   heroCta: {
     flexDirection: 'row',
