@@ -12,21 +12,20 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '../../constants/fonts';
+import { GROQ_CHAT_API_KEY, GROQ_MODEL } from '../../constants/chatbot';
 import { ChatMessage, sendChatRequest } from '../../services/chatbotApi';
 
 export default function AskScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const aiConfigured = !!GROQ_CHAT_API_KEY;
 
   const handleSend = async () => {
     const trimmed = input.trim();
-    if (!trimmed || isSending) return;
+    if (!trimmed || isSending || !aiConfigured) return;
 
-    const newMessages: ChatMessage[] = [
-      ...messages,
-      { role: 'user', content: trimmed },
-    ];
+    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: trimmed }];
 
     setMessages(newMessages);
     setInput('');
@@ -34,18 +33,13 @@ export default function AskScreen() {
 
     try {
       const assistantReply = await sendChatRequest(newMessages);
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: assistantReply },
-      ]);
+      setMessages([...newMessages, { role: 'assistant', content: assistantReply }]);
     } catch (error: any) {
       setMessages([
         ...newMessages,
         {
           role: 'assistant',
-          content:
-            error?.message ??
-            'Sorry, something went wrong while contacting the assistant.',
+          content: error?.message ?? 'Sorry, something went wrong while contacting the assistant.',
         },
       ]);
     } finally {
@@ -62,9 +56,14 @@ export default function AskScreen() {
       >
         <View style={styles.header}>
           <Text style={styles.title}>Ask a Question</Text>
-          <Text style={styles.subtitle}>
-            Get help about the app, Quran reading, or general questions.
-          </Text>
+          <Text style={styles.subtitle}>Get help about the app, Quran reading, or general questions.</Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.statusBadge, aiConfigured ? styles.statusBadgeReady : styles.statusBadgeMissing]}>
+              <Text style={[styles.statusBadgeText, aiConfigured ? styles.statusBadgeTextReady : styles.statusBadgeTextMissing]}>
+                {aiConfigured ? `Model: ${GROQ_MODEL}` : 'AI not configured'}
+              </Text>
+            </View>
+          </View>
         </View>
 
         <ScrollView
@@ -76,8 +75,9 @@ export default function AskScreen() {
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No questions yet</Text>
               <Text style={styles.emptyText}>
-                Type your question below to start a conversation with the
-                assistant.
+                {aiConfigured
+                  ? 'Type your question below to start a conversation with the assistant.'
+                  : 'Add your Groq API key in .env, restart Expo, and the model will appear here.'}
               </Text>
             </View>
           )}
@@ -85,19 +85,12 @@ export default function AskScreen() {
           {messages.map((msg, index) => (
             <View
               key={index}
-              style={[
-                styles.messageBubble,
-                msg.role === 'user'
-                  ? styles.messageUser
-                  : styles.messageAssistant,
-              ]}
+              style={[styles.messageBubble, msg.role === 'user' ? styles.messageUser : styles.messageAssistant]}
             >
               <Text
                 style={[
                   styles.messageText,
-                  msg.role === 'user'
-                    ? styles.messageTextUser
-                    : styles.messageTextAssistant,
+                  msg.role === 'user' ? styles.messageTextUser : styles.messageTextAssistant,
                 ]}
               >
                 {msg.content}
@@ -108,7 +101,7 @@ export default function AskScreen() {
           {isSending && (
             <View style={styles.typingRow}>
               <ActivityIndicator size="small" color="#0F6A4C" />
-              <Text style={styles.typingText}>Assistant is typing…</Text>
+              <Text style={styles.typingText}>Assistant is typing...</Text>
             </View>
           )}
         </ScrollView>
@@ -116,25 +109,19 @@ export default function AskScreen() {
         <View style={styles.inputRow}>
           <TextInput
             style={styles.input}
-            placeholder="Ask anything…"
+            placeholder={aiConfigured ? 'Ask anything...' : 'Add API key to enable AI'}
             placeholderTextColor="#9CA3AF"
             value={input}
             onChangeText={setInput}
             multiline
+            editable={aiConfigured}
           />
           <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!input.trim() || isSending) && styles.sendButtonDisabled,
-            ]}
+            style={[styles.sendButton, (!input.trim() || isSending || !aiConfigured) && styles.sendButtonDisabled]}
             onPress={handleSend}
-            disabled={!input.trim() || isSending}
+            disabled={!input.trim() || isSending || !aiConfigured}
           >
-            {isSending ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.sendButtonText}>Send</Text>
-            )}
+            {isSending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.sendButtonText}>Send</Text>}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -167,6 +154,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B7280',
     fontFamily: fonts.regular,
+  },
+  statusRow: {
+    marginTop: 10,
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  statusBadgeReady: {
+    backgroundColor: '#E8F7EE',
+  },
+  statusBadgeMissing: {
+    backgroundColor: '#FEF3F2',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontFamily: fonts.semiBold,
+  },
+  statusBadgeTextReady: {
+    color: '#0F6A4C',
+  },
+  statusBadgeTextMissing: {
+    color: '#B42318',
   },
   messagesContainer: {
     flex: 1,
@@ -267,4 +279,3 @@ const styles = StyleSheet.create({
     fontFamily: fonts.semiBold,
   },
 });
-

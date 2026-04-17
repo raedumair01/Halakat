@@ -1,21 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
-import { Eye, EyeOff, Facebook, Chrome, Apple } from 'lucide-react-native';
+import { Eye, EyeOff } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { fonts } from '../constants/fonts';
-import { hasActiveSession, setActiveSession } from '../services/authSession';
+import { useAuth } from '../providers/AuthProvider';
 
 type AuthMode = 'login' | 'register';
 
 export default function AuthScreen() {
   const router = useRouter();
+  const { isReady, isAuthenticated, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [securePassword, setSecurePassword] = useState(true);
   const [secureConfirmPassword, setSecureConfirmPassword] = useState(true);
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({
+    fullName: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -25,28 +30,29 @@ export default function AuthScreen() {
   const minPasswordLength = 8;
 
   useEffect(() => {
-    const checkSession = async () => {
-      const activeSession = await hasActiveSession();
-      if (activeSession) {
-        router.replace('/(tabs)/home');
-      }
-    };
+    if (isReady && isAuthenticated) {
+      router.replace('/(tabs)/home');
+    }
+  }, [isAuthenticated, isReady, router]);
 
-    checkSession();
-  }, [router]);
-
-  const clearError = (field: 'email' | 'password' | 'confirmPassword') => {
+  const clearError = (field: 'fullName' | 'email' | 'password' | 'confirmPassword') => {
     setErrors(prev => ({ ...prev, [field]: '' }));
   };
 
   const validateForm = () => {
     const nextErrors = {
+      fullName: '',
       email: '',
       password: '',
       confirmPassword: '',
     };
 
     const trimmedEmail = email.trim();
+    const trimmedName = fullName.trim();
+
+    if (isRegister && !trimmedName) {
+      nextErrors.fullName = 'Full name is required.';
+    }
 
     if (!trimmedEmail) {
       nextErrors.email = 'Email is required.';
@@ -69,12 +75,12 @@ export default function AuthScreen() {
     }
 
     setErrors(nextErrors);
-    return !nextErrors.email && !nextErrors.password && !nextErrors.confirmPassword;
+    return !nextErrors.fullName && !nextErrors.email && !nextErrors.password && !nextErrors.confirmPassword;
   };
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
-    setErrors({ email: '', password: '', confirmPassword: '' });
+    setErrors({ fullName: '', email: '', password: '', confirmPassword: '' });
   };
 
   const handleContinue = async () => {
@@ -83,24 +89,41 @@ export default function AuthScreen() {
     }
 
     try {
-      await setActiveSession(email.trim().toLowerCase());
+      setSubmitting(true);
+      if (isRegister) {
+        await signUp({
+          fullName: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+        });
+      } else {
+        await signIn({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+      }
       router.replace('/(tabs)/home');
     } catch (error) {
-      console.error('Failed to persist auth session:', error);
-      Alert.alert('Login failed', 'Unable to save session. Please try again.');
+      console.error('Authentication failed:', error);
+      Alert.alert(isRegister ? 'Sign up failed' : 'Login failed', error instanceof Error ? error.message : 'Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <View style={styles.root}>
+    <LinearGradient colors={['#F4F8F3', '#FFFFFF', '#F9F2E8']} style={styles.root}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
+          <View style={styles.badge}>
+            <Text style={styles.badgeText}>HALAKAT COMMUNITY</Text>
+          </View>
           <Text style={styles.brand}>Halakat</Text>
-          <Text style={styles.subtitle}>Log in or register to save your progress</Text>
+          <Text style={styles.subtitle}>Join your Quran circle, track your growth, and keep your profile in sync.</Text>
 
           <View style={styles.segmentControl}>
             <TouchableOpacity
@@ -118,6 +141,25 @@ export default function AuthScreen() {
           </View>
 
           <View style={styles.form}>
+            {isRegister && (
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Full name</Text>
+                <TextInput
+                  style={[styles.input, errors.fullName && styles.inputError]}
+                  placeholder="Your full name"
+                  placeholderTextColor="#9CA3AF"
+                  value={fullName}
+                  onChangeText={value => {
+                    setFullName(value);
+                    if (errors.fullName) {
+                      clearError('fullName');
+                    }
+                  }}
+                />
+                {!!errors.fullName && <Text style={styles.errorText}>{errors.fullName}</Text>}
+              </View>
+            )}
+
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>{isRegister ? 'Email' : 'Email address'}</Text>
               <TextInput
@@ -201,22 +243,17 @@ export default function AuthScreen() {
             )}
           </View>
 
-          <TouchableOpacity style={styles.primaryButton} onPress={handleContinue}>
-            <Text style={styles.primaryButtonText}>{isRegister ? 'Register' : 'Sign in'}</Text>
+          <TouchableOpacity style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]} onPress={handleContinue} disabled={submitting}>
+            <Text style={styles.primaryButtonText}>
+              {submitting ? 'Please wait...' : isRegister ? 'Create account' : 'Sign in'}
+            </Text>
           </TouchableOpacity>
 
-          <View style={styles.separator}>
-            <View style={styles.separatorLine} />
-            <Text style={styles.separatorText}>
-              {isRegister ? 'Or Register with' : 'Other sign in options'}
-            </Text>
-            <View style={styles.separatorLine} />
-          </View>
-
-          <View style={styles.socialRow}>
-            <SocialButton icon={<Facebook size={20} color="#1F2937" />} />
-            <SocialButton icon={<Chrome size={20} color="#1F2937" />} />
-            <SocialButton icon={<Apple size={20} color="#1F2937" />} />
+          <View style={styles.highlights}>
+            <Text style={styles.highlightsTitle}>With your account you can:</Text>
+            <Text style={styles.highlightItem}>Save your profile and streak goals</Text>
+            <Text style={styles.highlightItem}>Keep your Halakat journey synced</Text>
+            <Text style={styles.highlightItem}>Update your circle identity anytime</Text>
           </View>
 
           <Text style={styles.switchText}>
@@ -227,22 +264,13 @@ export default function AuthScreen() {
           </Text>
         </View>
       </ScrollView>
-    </View>
-  );
-}
-
-function SocialButton({ icon }: { icon: React.ReactNode }) {
-  return (
-    <TouchableOpacity style={styles.socialButton}>
-      {icon}
-    </TouchableOpacity>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
@@ -251,14 +279,30 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 32,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 36,
     paddingHorizontal: 24,
     paddingTop: 32,
     paddingBottom: 40,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  badge: {
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#E5F1EA',
+    marginBottom: 18,
+  },
+  badgeText: {
+    fontSize: 12,
+    letterSpacing: 1.2,
+    color: '#0F6A53',
+    fontFamily: fonts.semiBold,
   },
   brand: {
-    fontSize: 32,
+    fontSize: 34,
     color: '#0F172A',
     textAlign: 'center',
     fontFamily: fonts.bold,
@@ -269,6 +313,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     marginBottom: 28,
+    lineHeight: 24,
     fontFamily: fonts.regular,
   },
   segmentControl: {
@@ -358,41 +403,30 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
   },
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
   primaryButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontFamily: fonts.semiBold,
   },
-  separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-    gap: 12,
+  highlights: {
+    marginTop: 24,
+    padding: 18,
+    borderRadius: 24,
+    backgroundColor: '#F5FAF7',
+    gap: 8,
   },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#E5E7EB',
-  },
-  separatorText: {
+  highlightsTitle: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#0F3A2B',
     fontFamily: fonts.semiBold,
   },
-  socialRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  socialButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+  highlightItem: {
+    fontSize: 14,
+    color: '#5F6B66',
+    fontFamily: fonts.regular,
   },
   switchText: {
     textAlign: 'center',

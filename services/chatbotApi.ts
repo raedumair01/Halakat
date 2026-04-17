@@ -1,4 +1,4 @@
-import { CHAT_SYSTEM_PROMPT, GROQ_API_KEY, GROQ_API_URL } from '../constants/chatbot';
+import { CHAT_SYSTEM_PROMPT, GROQ_CHAT_API_KEY, GROQ_API_URL, GROQ_MODEL } from '../constants/chatbot';
 
 export type ChatRole = 'system' | 'user' | 'assistant';
 
@@ -10,18 +10,18 @@ export type ChatMessage = {
 export async function sendChatRequest(
   messages: ChatMessage[]
 ): Promise<string> {
-  if (!GROQ_API_KEY) {
-    throw new Error('Chat API key is missing.');
+  if (!GROQ_CHAT_API_KEY) {
+    throw new Error('Chat AI is not configured yet. Add EXPO_PUBLIC_GROQ_CHAT_API_KEY to your .env file.');
   }
 
   const response = await fetch(GROQ_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${GROQ_API_KEY}`,
+      Authorization: `Bearer ${GROQ_CHAT_API_KEY}`,
     },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model: GROQ_MODEL,
       messages: [
         { role: 'system', content: CHAT_SYSTEM_PROMPT },
         ...messages,

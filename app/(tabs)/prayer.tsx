@@ -1,8 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Linking,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from 'expo-router';
 import { fonts } from '../../constants/fonts';
 
 type PrayerName = 'Fajr' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha';
@@ -22,7 +32,20 @@ type AladhanResponse = {
   };
 };
 
+type CachedPrayerPayload = {
+  locationLabel: string;
+  timezone: string;
+  gregorianDate: string;
+  hijriDate: string;
+  timings: PrayerTimes;
+  latitude: number;
+  longitude: number;
+  savedAt: string;
+};
+
 const PRAYER_ORDER: PrayerName[] = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+const PRAYER_CACHE_KEY = 'halakat_prayer_cache_v1';
+const PRAYER_CALCULATION_METHOD = 1;
 
 const cleanTime = (time: string) => (time || '').split(' ')[0];
 
@@ -76,19 +99,86 @@ const getNextPrayer = (timings: PrayerTimes, timeZone?: string) => {
 };
 
 const fetchPrayerTimesByCoordinates = async (latitude: number, longitude: number): Promise<AladhanResponse> => {
-  const url = `https://api.aladhan.com/v1/timings?latitude=${latitude}&longitude=${longitude}&method=2`;
+  const url = `https://api.aladhan.com/v1/timings?latitude=${latitude}&longitude=${longitude}&method=${PRAYER_CALCULATION_METHOD}`;
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error('Failed to fetch prayer timings');
+    throw new Error('Failed to fetch prayer timings.');
   }
 
   const payload = (await response.json()) as AladhanResponse;
   if (!payload?.data?.timings) {
-    throw new Error('Invalid prayer timings response');
+    throw new Error('Invalid prayer timings response.');
   }
 
   return payload;
 };
+
+async function getReadableLocationLabel(latitude: number, longitude: number) {
+  try {
+    const places = await Location.reverseGeocodeAsync({ latitude, longitude });
+    if (places.length > 0) {
+      const place = places[0];
+      const city = place.city || place.subregion || place.region || 'Unknown city';
+      const country = place.country || '';
+      return country ? `${city}, ${country}` : city;
+    }
+  } catch {
+    return `${latitude.toFixed(2)}, ${longitude.toFixed(2)}`;
+  }
+
+  return `${latitude.toFixed(2)}, ${longitude.toFixed(2)}`;
+}
+
+async function getBestAvailablePosition() {
+  const lastKnown = await Location.getLastKnownPositionAsync({
+    maxAge: 1000 * 60 * 30,
+    requiredAccuracy: 1000,
+  });
+
+  try {
+    const current = await Promise.race([
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+        mayShowUserSettingsDialog: true,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Timed out while fetching current location.')), 12000)
+      ),
+    ]);
+
+    return current;
+  } catch (error) {
+    if (lastKnown) {
+      return lastKnown;
+    }
+
+    throw error;
+  }
+}
+
+function buildPrayerPayload(
+  apiPayload: AladhanResponse,
+  latitude: number,
+  longitude: number,
+  locationLabel: string
+): CachedPrayerPayload {
+  return {
+    locationLabel,
+    latitude,
+    longitude,
+    gregorianDate: apiPayload.data.date.gregorian.date,
+    hijriDate: apiPayload.data.date.hijri.date,
+    timezone: apiPayload.data.meta.timezone,
+    timings: {
+      Fajr: cleanTime(apiPayload.data.timings.Fajr),
+      Dhuhr: cleanTime(apiPayload.data.timings.Dhuhr),
+      Asr: cleanTime(apiPayload.data.timings.Asr),
+      Maghrib: cleanTime(apiPayload.data.timings.Maghrib),
+      Isha: cleanTime(apiPayload.data.timings.Isha),
+    },
+    savedAt: new Date().toISOString(),
+  };
+}
 
 export default function PrayerTab() {
   const [isLoading, setIsLoading] = useState(true);
@@ -100,67 +190,106 @@ export default function PrayerTab() {
   const [hijriDate, setHijriDate] = useState('');
   const [timings, setTimings] = useState<PrayerTimes | null>(null);
   const [nextPrayer, setNextPrayer] = useState<PrayerName | null>(null);
+  const [isUsingCachedData, setIsUsingCachedData] = useState(false);
+  const [lastUpdatedLabel, setLastUpdatedLabel] = useState('');
 
-  const loadPrayerTimes = useCallback(async (isManualRefresh = false) => {
-    try {
-      if (isManualRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
-
-      setError(null);
-
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== 'granted') {
-        throw new Error('Location permission is required to fetch accurate prayer times.');
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      const { latitude, longitude } = position.coords;
-
-      try {
-        const places = await Location.reverseGeocodeAsync({ latitude, longitude });
-        if (places.length > 0) {
-          const place = places[0];
-          const city = place.city || place.subregion || place.region || 'Unknown city';
-          const country = place.country || '';
-          setLocationLabel(country ? `${city}, ${country}` : city);
-        } else {
-          setLocationLabel(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
-        }
-      } catch {
-        setLocationLabel(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
-      }
-
-      const payload = await fetchPrayerTimesByCoordinates(latitude, longitude);
-      const nextTimings: PrayerTimes = {
-        Fajr: cleanTime(payload.data.timings.Fajr),
-        Dhuhr: cleanTime(payload.data.timings.Dhuhr),
-        Asr: cleanTime(payload.data.timings.Asr),
-        Maghrib: cleanTime(payload.data.timings.Maghrib),
-        Isha: cleanTime(payload.data.timings.Isha),
-      };
-
-      setGregorianDate(payload.data.date.gregorian.date);
-      setHijriDate(payload.data.date.hijri.date);
-      setTimezone(payload.data.meta.timezone);
-      setTimings(nextTimings);
-      setNextPrayer(getNextPrayer(nextTimings, payload.data.meta.timezone));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load prayer times right now.');
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
+  const applyPrayerPayload = useCallback((payload: CachedPrayerPayload, cached = false) => {
+    setLocationLabel(payload.locationLabel);
+    setTimezone(payload.timezone);
+    setGregorianDate(payload.gregorianDate);
+    setHijriDate(payload.hijriDate);
+    setTimings(payload.timings);
+    setNextPrayer(getNextPrayer(payload.timings, payload.timezone));
+    setIsUsingCachedData(cached);
+    setLastUpdatedLabel(new Date(payload.savedAt).toLocaleString());
   }, []);
+
+  const loadCachedPrayerTimes = useCallback(async () => {
+    const raw = await AsyncStorage.getItem(PRAYER_CACHE_KEY);
+    if (!raw) return null;
+
+    try {
+      const cached = JSON.parse(raw) as CachedPrayerPayload;
+      applyPrayerPayload(cached, true);
+      return cached;
+    } catch {
+      return null;
+    }
+  }, [applyPrayerPayload]);
+
+  const loadPrayerTimes = useCallback(
+    async (isManualRefresh = false) => {
+      try {
+        if (isManualRefresh) {
+          setIsRefreshing(true);
+        } else {
+          setIsLoading(true);
+        }
+
+        setError(null);
+
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          const cached = await loadCachedPrayerTimes();
+          if (cached) {
+            setError('Location services are off. Showing the last saved prayer times for your recent location.');
+            return;
+          }
+
+          throw new Error('Turn on location services to load prayer times for your current location.');
+        }
+
+        let permission = await Location.getForegroundPermissionsAsync();
+        if (permission.status !== 'granted') {
+          permission = await Location.requestForegroundPermissionsAsync();
+        }
+
+        if (permission.status !== 'granted') {
+          const cached = await loadCachedPrayerTimes();
+          if (cached) {
+            setError('Location permission was denied. Showing the most recent saved prayer times.');
+            return;
+          }
+
+          throw new Error('Location permission is required to fetch prayer times for your current location.');
+        }
+
+        const position = await getBestAvailablePosition();
+        const { latitude, longitude } = position.coords;
+        const readableLocation = await getReadableLocationLabel(latitude, longitude);
+        const apiPayload = await fetchPrayerTimesByCoordinates(latitude, longitude);
+        const nextPayload = buildPrayerPayload(apiPayload, latitude, longitude, readableLocation);
+
+        applyPrayerPayload(nextPayload, false);
+        await AsyncStorage.setItem(PRAYER_CACHE_KEY, JSON.stringify(nextPayload));
+      } catch (err) {
+        const cached = await loadCachedPrayerTimes();
+        if (cached) {
+          setError(
+            err instanceof Error
+              ? `${err.message} Showing your last saved prayer times instead.`
+              : 'Unable to refresh current location, so the last saved prayer times are shown.'
+          );
+        } else {
+          setError(err instanceof Error ? err.message : 'Unable to load prayer times right now.');
+        }
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [applyPrayerPayload, loadCachedPrayerTimes]
+  );
 
   useEffect(() => {
     loadPrayerTimes();
   }, [loadPrayerTimes]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPrayerTimes();
+    }, [loadPrayerTimes])
+  );
 
   const todayRows = useMemo(
     () =>
@@ -178,14 +307,18 @@ export default function PrayerTab() {
         <View style={styles.header}>
           <Text style={styles.greeting}>Asslamualaikum</Text>
           <Text style={styles.title}>Prayer Times</Text>
-          <Text style={styles.subtitle}>Daily salah schedule based on your location.</Text>
+          <Text style={styles.subtitle}>Daily salah schedule based on your current location.</Text>
         </View>
 
         <LinearGradient colors={['#6F9A84', '#BDCCC1']} style={styles.heroCard}>
           <Text style={styles.heroLabel}>Current Location</Text>
           <Text style={styles.heroLocation}>{locationLabel}</Text>
-          <Text style={styles.heroDate}>{gregorianDate || '---'}  |  {hijriDate || '---'}</Text>
+          <Text style={styles.heroDate}>
+            {gregorianDate || '---'} | {hijriDate || '---'}
+          </Text>
           <Text style={styles.heroTimezone}>{timezone || 'Timezone unavailable'}</Text>
+          {lastUpdatedLabel ? <Text style={styles.heroMeta}>Updated: {lastUpdatedLabel}</Text> : null}
+          {isUsingCachedData ? <Text style={styles.heroMeta}>Showing saved timings until live location is available.</Text> : null}
           {nextPrayer && timings && (
             <Text style={styles.heroNextPrayer}>
               Next: {nextPrayer} at {formatTimeWithMeridiem(timings[nextPrayer])}
@@ -196,6 +329,9 @@ export default function PrayerTab() {
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.refreshButton} onPress={() => loadPrayerTimes(true)} disabled={isRefreshing}>
             <Text style={styles.refreshButtonText}>{isRefreshing ? 'Refreshing...' : 'Refresh Location'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryButton} onPress={() => Linking.openSettings()}>
+            <Text style={styles.secondaryButtonText}>Location Settings</Text>
           </TouchableOpacity>
         </View>
 
@@ -209,8 +345,15 @@ export default function PrayerTab() {
         {!!error && <Text style={styles.errorText}>{error}</Text>}
 
         <View style={styles.listSection}>
-          {todayRows.map((row) => (
-            <View key={row.name} style={[styles.prayerRow, row.isNext && styles.prayerRowActive]}>
+          {todayRows.map((row, index) => (
+            <View
+              key={row.name}
+              style={[
+                styles.prayerRow,
+                row.isNext && styles.prayerRowActive,
+                index === todayRows.length - 1 && styles.prayerRowLast,
+              ]}
+            >
               <Text style={[styles.prayerName, row.isNext && styles.prayerNameActive]}>{row.name}</Text>
               <Text style={[styles.prayerTime, row.isNext && styles.prayerTimeActive]}>{row.time}</Text>
             </View>
@@ -277,16 +420,26 @@ const styles = StyleSheet.create({
   heroTimezone: {
     fontSize: 12,
     color: '#ECFDF5',
-    marginBottom: 10,
+    marginBottom: 4,
     fontFamily: fonts.medium,
+  },
+  heroMeta: {
+    fontSize: 12,
+    color: '#F5FFF8',
+    marginBottom: 4,
+    fontFamily: fonts.regular,
   },
   heroNextPrayer: {
     fontSize: 14,
     color: '#FFFFFF',
+    marginTop: 6,
     fontFamily: fonts.semiBold,
   },
   actionRow: {
     marginBottom: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
   },
   refreshButton: {
     alignSelf: 'flex-start',
@@ -297,6 +450,18 @@ const styles = StyleSheet.create({
   },
   refreshButtonText: {
     color: '#FFFFFF',
+    fontSize: 13,
+    fontFamily: fonts.semiBold,
+  },
+  secondaryButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: '#E7F3EC',
+  },
+  secondaryButtonText: {
+    color: '#0F6A4C',
     fontSize: 13,
     fontFamily: fonts.semiBold,
   },
@@ -315,6 +480,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#DC2626',
     marginBottom: 12,
+    lineHeight: 20,
     fontFamily: fonts.medium,
   },
   listSection: {
@@ -333,6 +499,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EEF2F7',
     backgroundColor: '#FFFFFF',
+  },
+  prayerRowLast: {
+    borderBottomWidth: 0,
   },
   prayerRowActive: {
     backgroundColor: '#ECFDF5',
@@ -354,4 +523,3 @@ const styles = StyleSheet.create({
     color: '#0F6A4C',
   },
 });
-

@@ -4,37 +4,23 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import Svg, { Rect, G, Path, Defs, ClipPath } from 'react-native-svg';
 import { fonts } from '../constants/fonts';
-import { hasActiveSession } from '../services/authSession';
+import { useAuth } from '../providers/AuthProvider';
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { isReady, isAuthenticated } = useAuth();
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    if (!isReady) return;
 
-    const bootstrapSession = async () => {
-      try {
-        const activeSession = await hasActiveSession();
-        if (activeSession) {
-          router.replace('/(tabs)/home');
-          return;
-        }
-      } catch (error) {
-        console.error('Failed to read auth session:', error);
-      } finally {
-        if (isMounted) {
-          setCheckingSession(false);
-        }
-      }
-    };
+    if (isAuthenticated) {
+      router.replace('/(tabs)/home');
+      return;
+    }
 
-    bootstrapSession();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
+    setCheckingSession(false);
+  }, [isAuthenticated, isReady, router]);
 
   if (checkingSession) {
     return (

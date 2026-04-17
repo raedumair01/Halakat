@@ -62,6 +62,11 @@ const extractSurahList = (payload: SurahListResponse | SurahListItem[]): SurahLi
 };
 
 const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const GROQ_TRANSCRIBE_MODEL = 'whisper-large-v3-turbo';
+const GROQ_VOICE_API_KEY =
+  process.env.EXPO_PUBLIC_GROQ_VOICE_API_KEY ??
+  process.env.EXPO_PUBLIC_GROQ_API_KEY ??
+  '';
 const MIN_VALID_DURATION = 1.0;
 const NOTHING_THRESHOLD = 0.5;
 const AYAH_MATCH_THRESHOLD = 0.62;
@@ -127,9 +132,8 @@ const calculateAyahMatchScore = (expected: string, actual: string) => {
 };
 
 const transcribeWithGroq = async (uri: string): Promise<string> => {
-  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
-  if (!apiKey) {
-    throw new Error('Missing EXPO_PUBLIC_GROQ_API_KEY');
+  if (!GROQ_VOICE_API_KEY) {
+    throw new Error('Recitation AI is not configured yet. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY to your .env file.');
   }
 
   const fileName = uri.split('/').pop() || 'recitation.m4a';
@@ -137,7 +141,7 @@ const transcribeWithGroq = async (uri: string): Promise<string> => {
   const mimeType = extension === 'wav' ? 'audio/wav' : 'audio/m4a';
 
   const body = new FormData();
-  body.append('model', 'whisper-large-v3-turbo');
+  body.append('model', GROQ_TRANSCRIBE_MODEL);
   body.append('language', 'ar');
   body.append('response_format', 'json');
   body.append('file', {
@@ -149,7 +153,7 @@ const transcribeWithGroq = async (uri: string): Promise<string> => {
   const response = await fetch(GROQ_TRANSCRIBE_URL, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${GROQ_VOICE_API_KEY}`,
     },
     body,
   });
@@ -327,6 +331,7 @@ function MicrophoneIllustration() {
 
 export default function ReciteScreen() {
   const router = useRouter();
+  const aiConfigured = !!GROQ_VOICE_API_KEY;
   const [showVerses, setShowVerses] = useState(true);
   const [recordEnabled, setRecordEnabled] = useState(false);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
@@ -474,12 +479,23 @@ export default function ReciteScreen() {
       return { isValid: false, reason: 'wrong', transcript, score };
     } catch (error) {
       console.warn('[ReciteScreen] Error analyzing recording:', error);
+      if (error instanceof Error && error.message.includes('EXPO_PUBLIC_GROQ_VOICE_API_KEY')) {
+        setStatusMessage('Recitation AI is not configured. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY in .env and restart Expo.');
+      }
       return { isValid: false, reason: 'wrong' };
     }
   };
 
   const handleRecordToggle = async (value: boolean) => {
     if (value) {
+      if (!aiConfigured) {
+        setStatusMessage('Recitation AI is not configured. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY in .env and restart Expo.');
+        Alert.alert(
+          'AI not configured',
+          'Add EXPO_PUBLIC_GROQ_VOICE_API_KEY to your .env file and restart Expo to enable recitation analysis.'
+        );
+        return;
+      }
       if (ayahCount === 0 || !!surahError || isSurahLoading) {
         setStatusMessage('Verses are not ready yet. Please wait.');
         return;
@@ -695,9 +711,16 @@ export default function ReciteScreen() {
                 onValueChange={handleRecordToggle}
                 trackColor={{ false: '#D6D9DC', true: '#F28C8C' }}
                 thumbColor="#FFFFFF"
-                disabled={isSurahFinished || isSurahLoading || !!surahError}
+                disabled={isSurahFinished || isSurahLoading || !!surahError || !aiConfigured}
               />
             </View>
+          </View>
+          <View style={[styles.aiStatusBanner, aiConfigured ? styles.aiStatusBannerReady : styles.aiStatusBannerMissing]}>
+            <Text style={[styles.aiStatusText, aiConfigured ? styles.aiStatusTextReady : styles.aiStatusTextMissing]}>
+              {aiConfigured
+                ? `Recitation AI ready: ${GROQ_TRANSCRIBE_MODEL}`
+                : 'Recitation AI not configured. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY in .env and restart Expo.'}
+            </Text>
           </View>
           {isSurahLoading && (
             <View style={styles.loadingRow}>
@@ -1028,6 +1051,28 @@ const styles = StyleSheet.create({
     fontSize: 16 * SCALE,
     color: '#9DA0B5',
     fontFamily: fonts.medium,
+  },
+  aiStatusBanner: {
+    borderRadius: 14 * SCALE,
+    paddingVertical: 10 * SCALE,
+    paddingHorizontal: 12 * SCALE,
+    marginBottom: 14 * SCALE,
+  },
+  aiStatusBannerReady: {
+    backgroundColor: '#E8F7EE',
+  },
+  aiStatusBannerMissing: {
+    backgroundColor: '#FEF3F2',
+  },
+  aiStatusText: {
+    fontSize: 12 * SCALE,
+    fontFamily: fonts.semiBold,
+  },
+  aiStatusTextReady: {
+    color: '#0F6A4C',
+  },
+  aiStatusTextMissing: {
+    color: '#B42318',
   },
   ayahContainer: {
     alignItems: 'center',

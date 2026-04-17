@@ -1,8 +1,10 @@
 const AUTH_SESSION_KEY = 'halakat_auth_session_v1';
 
-type StoredSession = {
-  isLoggedIn: boolean;
-  email?: string;
+import type { UserProfile } from './authApi';
+
+export type StoredSession = {
+  token: string;
+  user: UserProfile;
   createdAt: string;
 };
 
@@ -44,10 +46,13 @@ function getStorageAdapter(): StorageAdapter {
   return cachedAdapter;
 }
 
-export async function setActiveSession(email?: string): Promise<void> {
+export async function setActiveSession(session: {
+  token: string;
+  user: UserProfile;
+}): Promise<void> {
   const payload: StoredSession = {
-    isLoggedIn: true,
-    email,
+    token: session.token,
+    user: session.user,
     createdAt: new Date().toISOString(),
   };
 
@@ -55,17 +60,27 @@ export async function setActiveSession(email?: string): Promise<void> {
   await storage.setItem(AUTH_SESSION_KEY, JSON.stringify(payload));
 }
 
-export async function hasActiveSession(): Promise<boolean> {
+export async function getActiveSession(): Promise<StoredSession | null> {
   const storage = getStorageAdapter();
   const raw = await storage.getItem(AUTH_SESSION_KEY);
-  if (!raw) return false;
+  if (!raw) return null;
 
   try {
     const parsed = JSON.parse(raw) as StoredSession;
-    return !!parsed?.isLoggedIn;
+
+    if (!parsed?.token || !parsed?.user) {
+      return null;
+    }
+
+    return parsed;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function hasActiveSession(): Promise<boolean> {
+  const session = await getActiveSession();
+  return !!session?.token;
 }
 
 export async function clearActiveSession(): Promise<void> {

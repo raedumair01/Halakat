@@ -2,7 +2,7 @@ import { Tabs, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
-import { hasActiveSession } from '../../services/authSession';
+import { useAuth } from '../../providers/AuthProvider';
 
 // Home Icon - Teal/Greenish-blue (#588B76)
 function HomeIcon({ size = 24, color = '#588B76' }: { size?: number; color?: string }) {
@@ -105,35 +105,19 @@ function ChatIcon({ size = 24, color = '#588B76' }: { size?: number; color?: str
 }
 export default function TabLayout() {
   const router = useRouter();
+  const { isReady, isAuthenticated } = useAuth();
   const [checkingSession, setCheckingSession] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    if (!isReady) return;
 
-    const guardSession = async () => {
-      try {
-        const activeSession = await hasActiveSession();
-        if (!activeSession) {
-          router.replace('/auth');
-          return;
-        }
-      } catch (error) {
-        console.error('Failed to validate auth session:', error);
-        router.replace('/auth');
-        return;
-      } finally {
-        if (isMounted) {
-          setCheckingSession(false);
-        }
-      }
-    };
+    if (!isAuthenticated) {
+      router.replace('/auth');
+      return;
+    }
 
-    guardSession();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
+    setCheckingSession(false);
+  }, [isAuthenticated, isReady, router]);
 
   if (checkingSession) {
     return (

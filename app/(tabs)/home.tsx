@@ -2,9 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image as RNImage } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { fonts } from '../../constants/fonts';
+import { useAuth } from '../../providers/AuthProvider';
 import Svg, {
   Path,
   Rect,
@@ -15,15 +15,13 @@ import Svg, {
   ClipPath,
   G,
 } from 'react-native-svg';
+
 type FeatureCardProps = {
   title: string;
   colors: [string, string];
   Illustration: React.ComponentType;
 };
 
-// Card order matches image layout:
-// Top-Left: Memorize, Top-Right: Recite
-// Bottom-Left: Retain, Bottom-Right: Track
 const features: FeatureCardProps[] = [
   { title: 'Memorize', colors: ['#E8F7E9', '#F8FFF6'], Illustration: MemorizeIcon },
   { title: 'Recite', colors: ['#FFEAE4', '#FFF6F3'], Illustration: ReciteIcon },
@@ -31,17 +29,13 @@ const features: FeatureCardProps[] = [
   { title: 'Track', colors: ['#EEF4FF', '#F8FBFF'], Illustration: TrackIcon },
 ];
 
-// Controls how the curved gradient sits inside the hero card.
-// CSS-like positioning: viewBox is 373x189
-// Values are relative to bottom-center positioning
 const HERO_CURVE_TRANSFORM = {
-  horizontalOffset: -20,  // Adjust left/right from center (negative = left, positive = right)
-  bottomOffset: -20,      // Distance from bottom (higher = more from bottom)
+  horizontalOffset: -20,
+  bottomOffset: -20,
   scale: 1.0,
 };
 
-
-function MenuIcon({ size = 24, color = "#8789A3" }: { size?: number; color?: string }) {
+function MenuIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M1 6H23V8.44444H1V6ZM1 14.5556H15.6667V17H1V14.5556Z" fill={color} />
@@ -49,50 +43,39 @@ function MenuIcon({ size = 24, color = "#8789A3" }: { size?: number; color?: str
   );
 }
 
-function SearchIcon({ size = 24, color = "#8789A3" }: { size?: number; color?: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <G clipPath="url(#clip0_1_5258)">
-        <Path
-          d="M18.031 16.617L22.314 20.899L20.899 22.314L16.617 18.031C15.0237 19.3082 13.042 20.0029 11 20C6.032 20 2 15.968 2 11C2 6.032 6.032 2 11 2C15.968 2 20 6.032 20 11C20.0029 13.042 19.3082 15.0237 18.031 16.617ZM16.025 15.875C17.2941 14.5699 18.0029 12.8204 18 11C18 7.132 14.867 4 11 4C7.132 4 4 7.132 4 11C4 14.867 7.132 18 11 18C12.8204 18.0029 14.5699 17.2941 15.875 16.025L16.025 15.875Z"
-          fill={color}
-        />
-      </G>
-      <Defs>
-        <ClipPath id="clip0_1_5258">
-          <Rect width="24" height="24" fill="white" />
-        </ClipPath>
-      </Defs>
-    </Svg>
-  );
-}
-
 export default function HomeTab() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const firstName = user?.fullName?.split(' ')[0] || 'Friend';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
-        <View style={styles.header}>
+          <View style={styles.header}>
             <TouchableOpacity style={styles.iconButton}>
               <MenuIcon size={20} color="#0F172A" />
             </TouchableOpacity>
-            <Text style={styles.brand}>Halakat</Text>
-            <TouchableOpacity style={styles.iconButton}>
-              <SearchIcon size={20} color="#8B8FA9" />
+            <View style={styles.headerCopy}>
+              <Text style={styles.headerGreeting}>Assalamu alaikum,</Text>
+              <Text style={styles.brand}>{firstName}</Text>
+            </View>
+            <TouchableOpacity style={styles.profileChip} onPress={() => router.push('/profile')}>
+              <Text style={styles.profileInitial}>{firstName.charAt(0).toUpperCase()}</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity style={styles.backButton}>
-            <ArrowLeft size={20} color="#0F3A2B" />
-          </TouchableOpacity>
 
           <View style={styles.heroCard}>
             <HeroBackground />
             <View style={styles.heroContent}>
               <View style={styles.heroText}>
-                <Text style={styles.heroArabic}>إنضم لحلقة</Text>
-                <TouchableOpacity style={styles.heroCta}>
-                  <Text style={styles.heroCtaText}>Join a Circle</Text>
+                <Text style={styles.heroEyebrow}>Community Circle</Text>
+                <Text style={styles.heroArabic}>انضم لحلقة</Text>
+                <Text style={styles.heroSubtext}>
+                  Build your profile, stay accountable, and grow with your Halakat community.
+                </Text>
+                <TouchableOpacity style={styles.heroCta} onPress={() => router.push('/profile')}>
+                  <Text style={styles.heroCtaText}>Open Profile</Text>
                   <View style={styles.heroCtaIcon}>
                     <HeroArrowIcon />
                   </View>
@@ -109,6 +92,18 @@ export default function HomeTab() {
               <FeatureCard key={feature.title} {...feature} />
             ))}
           </View>
+
+          <View style={styles.communityCard}>
+            <View style={styles.communityCopy}>
+              <Text style={styles.communityTitle}>Your profile</Text>
+              <Text style={styles.communityText}>
+                {user?.bio || 'Add a short bio and personalize your Halakat journey.'}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.communityButton} onPress={() => router.push('/profile')}>
+              <Text style={styles.communityButtonText}>Edit</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -121,32 +116,28 @@ function FeatureCard({ title, colors, Illustration }: FeatureCardProps) {
   const handlePress = () => {
     if (title === 'Memorize') {
       router.push('/memorize');
+      return;
+    }
+
+    if (title === 'Track') {
+      router.push('/profile');
     }
   };
 
-  const cardContent = (
-    <LinearGradient
-      colors={colors}
-      style={styles.featureCard}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+  return (
+    <TouchableOpacity
+      onPress={handlePress}
+      activeOpacity={title === 'Recite' || title === 'Retain' ? 1 : 0.9}
+      style={styles.cardContentWrapper}
     >
-      <Text style={styles.featureTitle}>{title}</Text>
-      <View style={styles.featureIcon}>
-        <Illustration />
-      </View>
-    </LinearGradient>
+      <LinearGradient colors={colors} style={styles.featureCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <Text style={styles.featureTitle}>{title}</Text>
+        <View style={styles.featureIcon}>
+          <Illustration />
+        </View>
+      </LinearGradient>
+    </TouchableOpacity>
   );
-
-  if (title === 'Memorize') {
-    return (
-      <TouchableOpacity onPress={handlePress} activeOpacity={1} style={styles.cardContentWrapper}>
-        {cardContent}
-      </TouchableOpacity>
-    );
-  }
-
-  return <View style={styles.cardContentWrapper}>{cardContent}</View>;
 }
 
 function HeroIllustration() {
@@ -213,7 +204,7 @@ function HeroBackground() {
       >
         <RNImage
           source={require('../../assets/images/curved.png')}
-          style={{ width: 450, height: 300, bottom: -38,left:-50 }}
+          style={{ width: 450, height: 300, bottom: -38, left: -50 }}
           resizeMode="contain"
         />
       </View>
@@ -300,37 +291,15 @@ function OldReciteIcon() {
   );
 }
 
-function RetainIcon() {
-  return (
-    <Svg width={70} height={70} viewBox="0 0 70 70" fill="none">
-      <Rect x={8} y={10} width={54} height={48} rx={10} fill="#FFF8E6" stroke="#D69B39" strokeWidth={2} />
-      <Rect x={20} y={5} width={30} height={12} rx={6} fill="#FBE3BA" stroke="#D69B39" strokeWidth={2} />
-      <Rect x={26} y={2} width={18} height={10} rx={5} fill="#FFF8E6" stroke="#D69B39" strokeWidth={2} />
-      <Path d="M20 30H48" stroke="#D69B39" strokeWidth={3} strokeLinecap="round" />
-      <Path d="M20 40H48" stroke="#D69B39" strokeWidth={3} strokeLinecap="round" />
-      <Path d="M20 50H40" stroke="#D69B39" strokeWidth={3} strokeLinecap="round" />
-      <Path d="M18 30L14.5 33.2L12 31" stroke="#2F8B57" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M18 40L14.5 43.2L12 41" stroke="#2F8B57" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-      <Path d="M18 50L14.5 53.2L12 51" stroke="#2F8B57" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-}
-
 function ReciteIcon() {
   return (
-    <RNImage
-      source={require('../../assets/images/recite.png')}
-      style={{ width: 53, height: 82 }}
-      resizeMode="contain"
-    />
+    <RNImage source={require('../../assets/images/recite.png')} style={{ width: 53, height: 82 }} resizeMode="contain" />
   );
 }
-
 
 function TrackIcon() {
   return (
     <RNImage source={require('../../assets/images/track.png')} style={{ width: 70, height: 70, borderRadius: 40 }} resizeMode="cover" />
-
   );
 }
 
@@ -346,7 +315,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 32,
     padding: 10,
-  
   },
   header: {
     flexDirection: 'row',
@@ -361,20 +329,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F2F4F7',
   },
+  headerCopy: {
+    flex: 1,
+    marginLeft: 14,
+  },
+  headerGreeting: {
+    fontSize: 13,
+    color: '#7C819A',
+    fontFamily: fonts.medium,
+  },
   brand: {
     fontSize: 25,
     color: '#0F3A2B',
-    left:-40,
     fontFamily: fonts.bold,
   },
-  backButton: {
+  profileChip: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#EAF4EE',
+    backgroundColor: '#0F6A53',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 24,
+  },
+  profileInitial: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontFamily: fonts.bold,
   },
   heroCard: {
     borderRadius: 24,
@@ -393,12 +373,23 @@ const styles = StyleSheet.create({
     gap: 12,
     zIndex: 1,
   },
+  heroEyebrow: {
+    fontSize: 13,
+    color: '#D2F0DC',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontFamily: fonts.semiBold,
+  },
   heroArabic: {
     fontSize: 24,
     color: '#FFFFFF',
-    marginBottom: 4,
-    left:30,
     fontFamily: fonts.arabicQuran,
+  },
+  heroSubtext: {
+    color: '#E8FFF0',
+    fontSize: 14,
+    lineHeight: 22,
+    fontFamily: fonts.regular,
   },
   heroCta: {
     flexDirection: 'row',
@@ -466,5 +457,40 @@ const styles = StyleSheet.create({
   cardContentWrapper: {
     width: '48%',
     marginBottom: 16,
+  },
+  communityCard: {
+    marginTop: 8,
+    borderRadius: 24,
+    backgroundColor: '#F8FBF8',
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  communityCopy: {
+    flex: 1,
+  },
+  communityTitle: {
+    fontSize: 17,
+    color: '#16372D',
+    fontFamily: fonts.bold,
+  },
+  communityText: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#667085',
+    fontFamily: fonts.regular,
+  },
+  communityButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 16,
+    backgroundColor: '#0F6A53',
+  },
+  communityButtonText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.semiBold,
   },
 });
