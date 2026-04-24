@@ -2,6 +2,7 @@ import { Tabs, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, View } from 'react-native';
 import Svg, { Path, G, ClipPath, Defs, Rect } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../providers/AuthProvider';
 
 // Home Icon - Teal/Greenish-blue (#588B76)
@@ -107,6 +108,7 @@ export default function TabLayout() {
   const router = useRouter();
   const { isReady, isAuthenticated } = useAuth();
   const [checkingSession, setCheckingSession] = useState(true);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!isReady) return;
@@ -139,8 +141,8 @@ export default function TabLayout() {
           borderTopColor: '#E5E7EB',
           borderTopWidth: 1,
           paddingTop: 8,
-          paddingBottom: Platform.OS === 'ios' ? 14 : 6,
-          height: Platform.OS === 'ios' ? 86 : 64,
+          paddingBottom: 6 + insets.bottom,
+          height: 64 + insets.bottom,
         },
         tabBarItemStyle: {
           paddingVertical: 2,

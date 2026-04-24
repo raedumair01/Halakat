@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import Svg, { Path, Rect, G, Mask, Defs, ClipPath, Circle } from 'react-native-svg';
 import { fonts } from '../constants/fonts';
 import { fetchSurahArabic, fetchSurahList } from '../services/quranApi';
+import { recordRecitationProgress } from '../services/practiceProgress';
 import {
   useAudioRecorder,
   useAudioRecorderState,
@@ -582,9 +583,16 @@ export default function ReciteScreen() {
       if (analysisResult.isValid && analysisResult.reason === 'correct') {
         // Mark this verse as completed and check if all are done
         setCompletedVerses(prev => {
+          const wasAlreadyCompleted = prev.has(currentAyahIndex);
           const newSet = new Set(prev);
           newSet.add(currentAyahIndex);
           const allVersesCompleted = newSet.size === ayahCount;
+
+          if (!wasAlreadyCompleted) {
+            void recordRecitationProgress(1).catch(error => {
+              console.warn('[ReciteScreen] Failed to persist recitation progress', error);
+            });
+          }
           
           console.log('[ReciteScreen] Completed verses:', Array.from(newSet).sort((a, b) => a - b));
           

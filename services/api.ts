@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 const API_PORT = '4000';
+const PRODUCTION_API_URL = 'https://halakat-backend-pi.vercel.app';
 
 function getExpoHost() {
   const hostUri = Constants.expoConfig?.hostUri;
@@ -14,7 +15,7 @@ function getExpoHost() {
 }
 
 function isLoopbackHost(hostname: string) {
-  return hostname === 'localhost' || hostname === '127.0.0.1';
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '10.0.2.2';
 }
 
 function getDefaultBaseUrl() {
@@ -39,11 +40,19 @@ function resolveBaseUrl() {
   const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 
   if (!configuredUrl) {
+    if (!__DEV__) {
+      return PRODUCTION_API_URL;
+    }
+
     return getDefaultBaseUrl();
   }
 
   try {
     const url = new URL(configuredUrl);
+
+    if (!__DEV__ && isLoopbackHost(url.hostname)) {
+      return PRODUCTION_API_URL;
+    }
 
     if (isLoopbackHost(url.hostname)) {
       const expoHost = getExpoHost();
@@ -61,6 +70,10 @@ function resolveBaseUrl() {
 
     return url.toString();
   } catch {
+    if (!__DEV__) {
+      return PRODUCTION_API_URL;
+    }
+
     return configuredUrl;
   }
 }

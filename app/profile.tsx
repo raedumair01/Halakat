@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -19,12 +19,23 @@ import { useAuth } from '../providers/AuthProvider';
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, saveProfile, signOut } = useAuth();
+  const { user, saveProfile, signOut, updateLocalProfile } = useAuth();
   const [fullName, setFullName] = useState(user?.fullName ?? '');
   const [bio, setBio] = useState(user?.bio ?? '');
   const [location, setLocation] = useState(user?.location ?? '');
   const [streakGoal, setStreakGoal] = useState(String(user?.streakGoal ?? 30));
   const [saving, setSaving] = useState(false);
+  const [hasEdited, setHasEdited] = useState(false);
+
+  useEffect(() => {
+    // Keep form in sync with context updates (e.g. after a successful save),
+    // but never clobber the user's in-progress edits.
+    if (hasEdited) return;
+    setFullName(user?.fullName ?? '');
+    setBio(user?.bio ?? '');
+    setLocation(user?.location ?? '');
+    setStreakGoal(String(user?.streakGoal ?? 30));
+  }, [hasEdited, user?.bio, user?.fullName, user?.location, user?.streakGoal]);
 
   const stats = useMemo(
     () => [
@@ -38,13 +49,24 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     try {
       setSaving(true);
+      const nextFullName = fullName.trim();
+      const nextBio = bio.trim();
+      const nextLocation = location.trim();
+      const nextStreak = Number(streakGoal) || 30;
       await saveProfile({
-        fullName: fullName.trim(),
-        bio: bio.trim(),
-        location: location.trim(),
-        streakGoal: Number(streakGoal) || 30,
+        fullName: nextFullName,
+        bio: nextBio,
+        location: nextLocation,
+        streakGoal: nextStreak,
       });
-      Alert.alert('Profile updated', 'Your Halakat profile has been saved.');
+      setHasEdited(false);
+      setFullName(nextFullName);
+      setBio(nextBio);
+      setLocation(nextLocation);
+      setStreakGoal(String(nextStreak));
+      Alert.alert('Profile updated', 'Your Halakat profile has been saved.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
     } catch (error) {
       Alert.alert('Update failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
@@ -89,19 +111,45 @@ export default function ProfileScreen() {
             <View style={styles.formCard}>
               <Text style={styles.sectionTitle}>Personal details</Text>
 
-              <Field label="Full name" value={fullName} onChangeText={setFullName} placeholder="Your full name" />
-              <Field label="Location" value={location} onChangeText={setLocation} placeholder="City or community" />
+              <Field
+                label="Full name"
+                value={fullName}
+                onChangeText={(value) => {
+                  setHasEdited(true);
+                  setFullName(value);
+                  updateLocalProfile({ fullName: value });
+                }}
+                placeholder="Your full name"
+              />
+              <Field
+                label="Location"
+                value={location}
+                onChangeText={(value) => {
+                  setHasEdited(true);
+                  setLocation(value);
+                  updateLocalProfile({ location: value });
+                }}
+                placeholder="City or community"
+              />
               <Field
                 label="Bio"
                 value={bio}
-                onChangeText={setBio}
+                onChangeText={(value) => {
+                  setHasEdited(true);
+                  setBio(value);
+                  updateLocalProfile({ bio: value });
+                }}
                 placeholder="Tell your circle what you're focusing on"
                 multiline
               />
               <Field
                 label="Streak goal (days)"
                 value={streakGoal}
-                onChangeText={setStreakGoal}
+                onChangeText={(value) => {
+                  setHasEdited(true);
+                  setStreakGoal(value);
+                  updateLocalProfile({ streakGoal: Number(value) || 0 });
+                }}
                 placeholder="30"
                 keyboardType="number-pad"
               />

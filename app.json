@@ -5,6 +5,11 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/appicon.png",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#18392b"
+    },
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -26,7 +31,9 @@
         {
           "locationWhenInUsePermission": "Allow Halakat to access your location to show accurate prayer times."
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true
@@ -41,6 +48,13 @@
         "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.raedumair02.halakat"
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7ef3d255-f5fe-4ee3-9c4a-3ab740f557d4"
+      }
+    },
+    "owner": "raedumair02"
   }
 }

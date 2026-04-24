@@ -1,17 +1,43 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
-    "preview": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "apk": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://halakat-backend-pi.vercel.app"
+      },
       "android": {
         "buildType": "apk"
       }
     },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://halakat-backend-pi.vercel.app"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://halakat-backend-pi.vercel.app"
+      },
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "simulator": false
       }
     }
   }

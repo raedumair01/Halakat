@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ArrowLeft } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import Svg, { Path, Rect, G, Defs, ClipPath, Circle } from 'react-native-svg';
+import Svg, { ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 import { fonts } from '../../constants/fonts';
-import { fetchFullQuran, fetchJuz } from '../../services/quranApi';
+import { fetchFullQuran } from '../../services/quranApi';
+
+type Ayah = {
+  juz: number;
+  page: number;
+  hizbQuarter: number;
+  numberInSurah: number;
+};
 
 type Surah = {
   number: number;
@@ -14,43 +20,22 @@ type Surah = {
   englishName: string;
   englishNameTranslation: string;
   revelationType: string;
-  ayahs: Array<{
-    number: number;
-    text: string;
-    numberInSurah: number;
-    juz: number;
-    page: number;
-    hizbQuarter: number;
-  }>;
+  ayahs: Ayah[];
 };
 
 type QuranData = {
   surahs: Surah[];
 };
 
-type TabType = 'Surah' | 'Para';
+type TabType = 'Surah' | 'Para' | 'Page' | 'Hijb';
 
-type ParaData = {
-  number: number;
-  surahs: Array<{ surah: Surah; startAyah: number; endAyah: number }>;
+type ListSummary = {
+  id: number;
+  title: string;
+  subtitle: string;
+  arabic?: string;
+  action?: () => void;
 };
-
-type ParaSummary = {
-  number: number;
-  surahCount: number;
-};
-
-type JuzResponse = {
-  number: number;
-  ayahs: Array<{
-    numberInSurah: number;
-    juz: number | string;
-    surah: {
-      number: number;
-    };
-  }>;
-};
-
 
 function MenuIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: string }) {
   return (
@@ -82,7 +67,31 @@ function ReadQuranIcon() {
   return (
     <Svg width={20} height={20} viewBox="0 0 20 20" fill="none">
       <Path
-        d="M18.3437 2.72559H13.4894C12.6779 2.72504 11.8905 3.00088 11.2568 3.50768C10.6231 4.01448 10.1809 4.72201 10.0031 5.51371C9.82487 4.72222 9.38258 4.01495 8.74897 3.50823C8.11537 3.0015 7.32818 2.72549 6.51687 2.72559H1.66624C1.22421 2.72575 0.80033 2.90142 0.487766 3.21399C0.175202 3.52655 -0.000467592 3.95043 -0.00063324 4.39246V12.9275C-0.000467592 13.3695 0.175202 13.7934 0.487766 14.1059C0.80033 14.4185 1.22421 14.5942 1.66624 14.5943H4.78062C8.32937 14.5943 9.38812 15.4412 9.89499 17.1987C9.91937 17.2962 10.0756 17.2962 10.1031 17.1987C10.6137 15.4418 11.6725 14.5943 15.2175 14.5943H18.3319C18.7739 14.5942 19.1978 14.4185 19.5103 14.1059C19.8229 13.7934 19.9986 13.3695 19.9987 12.9275V4.39621C19.9988 3.95567 19.8247 3.53297 19.5145 3.22018C19.2043 2.90738 18.783 2.72984 18.3425 2.72621L18.3437 2.72559ZM8.40249 11.9406C8.40266 11.9566 8.39964 11.9724 8.3936 11.9872C8.38757 12.002 8.37864 12.0154 8.36735 12.0267C8.35606 12.038 8.34263 12.0469 8.32784 12.0529C8.31305 12.059 8.29721 12.062 8.28124 12.0618H2.71499C2.69905 12.0619 2.68324 12.0588 2.66849 12.0528C2.65375 12.0467 2.64035 12.0378 2.62907 12.0265C2.61779 12.0152 2.60887 12.0018 2.6028 11.9871C2.59674 11.9723 2.59366 11.9565 2.59374 11.9406V11.1456C2.59374 11.08 2.64562 11.0243 2.71499 11.0243H8.28437C8.34999 11.0243 8.40562 11.0762 8.40562 11.1456V11.9406H8.40249ZM8.40249 9.82621C8.40257 9.84216 8.3995 9.85796 8.39343 9.87271C8.38737 9.88746 8.37844 9.90086 8.36716 9.91213C8.35589 9.92341 8.34249 9.93234 8.32774 9.9384C8.31299 9.94446 8.29719 9.94754 8.28124 9.94746H2.71499C2.69905 9.94754 2.68324 9.94446 2.66849 9.9384C2.65375 9.93234 2.64035 9.92341 2.62907 9.91213C2.61779 9.90086 2.60887 9.88746 2.6028 9.87271C2.59674 9.85796 2.59366 9.84216 2.59374 9.82621V9.03121C2.59374 8.96496 2.64562 8.90996 2.71499 8.90996H8.28437C8.34999 8.90996 8.40562 8.96184 8.40562 9.03121V9.82621H8.40249ZM8.40249 7.71184C8.40257 7.72778 8.3995 7.74359 8.39343 7.75833C8.38737 7.77308 8.37844 7.78648 8.36716 7.79776C8.35589 7.80903 8.34249 7.81796 8.32774 7.82403C8.31299 7.83009 8.29719 7.83317 8.28124 7.83309H2.71499C2.69905 7.83317 2.68324 7.83009 2.66849 7.82403C2.65375 7.81796 2.64035 7.80903 2.62907 7.79776C2.61779 7.78648 2.60887 7.77308 2.6028 7.75833C2.59674 7.74359 2.59366 7.72778 2.59374 7.71184V6.91684C2.59374 6.85121 2.64562 6.79559 2.71499 6.79559H8.28437C8.34999 6.79559 8.40562 6.84746 8.40562 6.91684V7.71184H8.40249ZM17.4062 11.9375C17.4063 11.9534 17.4032 11.9692 17.3972 11.984C17.3911 11.9987 17.3822 12.0121 17.3709 12.0234C17.3596 12.0347 17.3462 12.0436 17.3315 12.0497C17.3167 12.0557 17.3009 12.0588 17.285 12.0587H11.7187C11.7028 12.0588 11.687 12.0557 11.6722 12.0497C11.6575 12.0436 11.6441 12.0347 11.6328 12.0234C11.6215 12.0121 11.6126 11.9987 11.6066 11.984C11.6005 11.9692 11.5974 11.9534 11.5975 11.9375V11.1425C11.5975 11.0768 11.6494 11.0212 11.7187 11.0212H17.2881C17.3544 11.0212 17.4094 11.0731 17.4094 11.1425V11.9375H17.4062ZM17.4062 9.82309C17.4064 9.83906 17.4034 9.8549 17.3974 9.86968C17.3913 9.88447 17.3824 9.8979 17.3711 9.9092C17.3598 9.92049 17.3464 9.92941 17.3316 9.93545C17.3168 9.94148 17.301 9.9445 17.285 9.94434H11.7187C11.7028 9.94442 11.687 9.94134 11.6722 9.93528C11.6575 9.92921 11.6441 9.92028 11.6328 9.90901C11.6215 9.89773 11.6126 9.88433 11.6066 9.86958C11.6005 9.85484 11.5974 9.83903 11.5975 9.82309V9.02809C11.5975 8.96246 11.6494 8.90684 11.7187 8.90684H17.2881C17.3544 8.90684 17.4094 8.95871 17.4094 9.02809V9.82309H17.4062ZM17.4062 7.70809C17.4063 7.72403 17.4032 7.73984 17.3972 7.75458C17.3911 7.76933 17.3822 7.78273 17.3709 7.79401C17.3596 7.80528 17.3462 7.81421 17.3315 7.82028C17.3167 7.82634 17.3009 7.82942 17.285 7.82934H11.7187C11.7028 7.82942 11.687 7.82634 11.6722 7.82028C11.6575 7.81421 11.6441 7.80528 11.6328 7.79401C11.6215 7.78273 11.6126 7.76933 11.6066 7.75458C11.6005 7.73984 11.5974 7.72403 11.5975 7.70809V6.91621C11.5975 6.85059 11.6494 6.79496 11.7187 6.79496H17.2881C17.3544 6.79496 17.4094 6.84684 17.4094 6.91621V7.70809H17.4062Z"
+        d="M18.3437 2.72559H13.4894C12.6779 2.72504 11.8905 3.00088 11.2568 3.50768C10.6231 4.01448 10.1809 4.72201 10.0031 5.51371C9.82487 4.72222 9.38258 4.01495 8.74897 3.50823C8.11537 3.0015 7.32818 2.72549 6.51687 2.72559H1.66624C1.22421 2.72575 0.80033 2.90142 0.487766 3.21399C0.175202 3.52655 -0.000467592 3.95043 -0.00063324 4.39246V12.9275C-0.000467592 13.3695 0.175202 13.7934 0.487766 14.1059C0.80033 14.4185 1.22421 14.5942 1.66624 14.5943H4.78062C8.32937 14.5943 9.38812 15.4412 9.89499 17.1987C9.91937 17.2962 10.0756 17.2962 10.1031 17.1987C10.6137 15.4418 11.6725 14.5943 15.2175 14.5943H18.3319C18.7739 14.5942 19.1978 14.4185 19.5103 14.1059C19.8229 13.7934 19.9986 13.3695 19.9987 12.9275V4.39621C19.9988 3.95567 19.8247 3.53297 19.5145 3.22018C19.2043 2.90738 18.783 2.72984 18.3425 2.72621L18.3437 2.72559Z"
+        fill="#FFFFFF"
+      />
+      <Path
+        d="M8.28438 11.0244H2.71499C2.64607 11.0244 2.59374 11.0798 2.59374 11.1457V11.9407C2.59374 12.0066 2.64607 12.062 2.71499 12.062H8.28438C8.35024 12.062 8.40563 12.0097 8.40563 11.9407V11.1457C8.40563 11.0798 8.35024 11.0244 8.28438 11.0244Z"
+        fill="#FFFFFF"
+      />
+      <Path
+        d="M8.28438 8.91016H2.71499C2.64607 8.91016 2.59374 8.96554 2.59374 9.03141V9.82641C2.59374 9.89227 2.64607 9.94766 2.71499 9.94766H8.28438C8.35024 9.94766 8.40563 9.89533 8.40563 9.82641V9.03141C8.40563 8.96554 8.35024 8.91016 8.28438 8.91016Z"
+        fill="#FFFFFF"
+      />
+      <Path
+        d="M8.28438 6.7959H2.71499C2.64607 6.7959 2.59374 6.85129 2.59374 6.91715V7.71215C2.59374 7.77802 2.64607 7.8334 2.71499 7.8334H8.28438C8.35024 7.8334 8.40563 7.78108 8.40563 7.71215V6.91715C8.40563 6.85129 8.35024 6.7959 8.28438 6.7959Z"
+        fill="#FFFFFF"
+      />
+      <Path
+        d="M17.2881 11.0215H11.7187C11.6498 11.0215 11.5975 11.0769 11.5975 11.1427V11.9377C11.5975 12.0036 11.6498 12.059 11.7187 12.059H17.2881C17.354 12.059 17.4094 12.0067 17.4094 11.9377V11.1427C17.4094 11.0769 17.354 11.0215 17.2881 11.0215Z"
+        fill="#FFFFFF"
+      />
+      <Path
+        d="M17.2881 8.90723H11.7187C11.6498 8.90723 11.5975 8.96262 11.5975 9.02848V9.82348C11.5975 9.88934 11.6498 9.94473 11.7187 9.94473H17.2881C17.354 9.94473 17.4094 9.8924 17.4094 9.82348V9.02848C17.4094 8.96262 17.354 8.90723 17.2881 8.90723Z"
+        fill="#FFFFFF"
+      />
+      <Path
+        d="M17.2881 6.7959H11.7187C11.6498 6.7959 11.5975 6.85129 11.5975 6.91715V7.71215C11.5975 7.77802 11.6498 7.8334 11.7187 7.8334H17.2881C17.354 7.8334 17.4094 7.78108 17.4094 7.71215V6.91715C17.4094 6.85129 17.354 6.7959 17.2881 6.7959Z"
         fill="#FFFFFF"
       />
     </Svg>
@@ -94,7 +103,11 @@ function StarNumberIcon({ number }: { number: number }) {
     <View style={styles.starNumberContainer}>
       <Svg width={36} height={36} viewBox="0 0 36 36" fill="none">
         <Path
-          d="M31.0781 12.6219V5.97656C31.0781 5.39409 30.6059 4.92188 30.0234 4.92188H23.3781L18.7442 0.307336C18.3326 -0.102445 17.6673 -0.102445 17.2557 0.307336L12.6219 4.92188H5.97656C5.39409 4.92188 4.92188 5.39409 4.92188 5.97656V12.6219L0.307336 17.2558C-0.102445 17.6674 -0.102445 18.3327 0.307336 18.7443L4.92188 23.3781V30.0234C4.92188 30.6059 5.39409 31.0781 5.97656 31.0781H12.6219L17.2557 35.6927C17.4615 35.8976 17.7308 36 18 36C18.2692 36 18.5385 35.8976 18.7442 35.6927L23.3781 31.0781H30.0234C30.6059 31.0781 31.0781 30.6059 31.0781 30.0234V23.3781L35.6927 18.7443C36.1024 18.3327 36.1024 17.6674 35.6927 17.2558L31.0781 12.6219ZM29.2761 22.1983C29.0793 22.396 28.9688 22.6635 28.9688 22.9425V28.9688H22.9425C22.6636 28.9688 22.396 29.0793 22.1984 29.2761L18 33.4569L13.8017 29.2761C13.604 29.0793 13.3365 28.9688 13.0575 28.9688H7.03125V22.9425C7.03125 22.6636 6.92072 22.396 6.72391 22.1984L2.54313 18L6.72391 13.8017C6.92072 13.604 7.03125 13.3365 7.03125 13.0575V7.03125H13.0575C13.3364 7.03125 13.604 6.92072 13.8016 6.72391L18 2.54313L22.1984 6.72391C22.3961 6.92072 22.6636 7.03125 22.9425 7.03125H28.9688V13.0575C28.9688 13.3364 29.0793 13.604 29.2761 13.8016L33.4569 18L29.2761 22.1983Z"
+          d="M31.0781 12.6219V5.97656C31.0781 5.39409 30.6059 4.92188 30.0234 4.92188H23.3781L18.7442 0.307336C18.3326 -0.102445 17.6673 -0.102445 17.2557 0.307336L12.6219 4.92188H5.97656C5.39409 4.92188 4.92188 5.39409 4.92188 5.97656V12.6219L0.307336 17.2558C-0.102445 17.6674 -0.102445 18.3327 0.307336 18.7443L4.92188 23.3781V30.0234C4.92188 30.6059 5.39409 31.0781 5.97656 31.0781H12.6219L17.2557 35.6927C17.4615 35.8976 17.7308 36 18 36C18.2692 36 18.5385 35.8976 18.7442 35.6927L23.3781 31.0781H30.0234C30.6059 31.0781 31.0781 30.6059 31.0781 30.0234V23.3781L35.6927 18.7443C36.1024 18.3327 36.1024 17.6674 35.6927 17.2558L31.0781 12.6219Z"
+          fill="#E7F1EB"
+        />
+        <Path
+          d="M29.2761 22.1983C29.0793 22.396 28.9688 22.6635 28.9688 22.9425V28.9688H22.9425C22.6636 28.9688 22.396 29.0793 22.1984 29.2761L18 33.4569L13.8017 29.2761C13.604 29.0793 13.3365 28.9688 13.0575 28.9688H7.03125V22.9425C7.03125 22.6636 6.92072 22.396 6.72391 22.1984L2.54313 18L6.72391 13.8017C6.92072 13.604 7.03125 13.3365 7.03125 13.0575V7.03125H13.0575C13.3364 7.03125 13.604 6.92072 13.8016 6.72391L18 2.54313L22.1984 6.72391C22.3961 6.92072 22.6636 7.03125 22.9425 7.03125H28.9688V13.0575C28.9688 13.3364 29.0793 13.604 29.2761 13.8016L33.4569 18L29.2761 22.1983Z"
           fill="#588B76"
         />
       </Svg>
@@ -169,289 +182,212 @@ function QuranIllustration() {
 
 export default function QuranTab() {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabType>('Surah');
   const [quranData, setQuranData] = useState<QuranData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [paraSummaries, setParaSummaries] = useState<ParaSummary[]>([]);
-  const [paraLoading, setParaLoading] = useState(true);
-  const [paraError, setParaError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchQuranData();
-    fetchParaData();
+    const loadQuran = async () => {
+      try {
+        setLoading(true);
+        const data = await fetchFullQuran<QuranData>();
+        setQuranData(data);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load Quran');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadQuran();
   }, []);
 
-  const fetchQuranData = async () => {
-    try {
-      setLoading(true);
-      const data = await fetchFullQuran<QuranData>();
-      setQuranData(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load Quran data');
-      console.error('Error fetching Quran data:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchParaData = async () => {
-    try {
-      setParaLoading(true);
-      const summaries: ParaSummary[] = [];
-      const failedParas: number[] = [];
-
-      for (let paraNumber = 1; paraNumber <= 30; paraNumber += 1) {
-        try {
-          const juzPayload = await fetchJuz<JuzResponse>(paraNumber);
-          const surahNumbers = new Set<number>();
-          juzPayload.ayahs.forEach((ayah) => {
-            if (ayah?.surah?.number) {
-              surahNumbers.add(ayah.surah.number);
-            }
-          });
-
-          summaries.push({
-            number: paraNumber,
-            surahCount: surahNumbers.size,
-          });
-        } catch {
-          failedParas.push(paraNumber);
-          summaries.push({
-            number: paraNumber,
-            surahCount: 0,
-          });
-        }
-      }
-
-      const sorted = summaries.sort((a, b) => a.number - b.number);
-      setParaSummaries(sorted);
-
-      if (failedParas.length > 0) {
-        setParaError(`Some paras failed to load from API: ${failedParas.join(', ')}`);
-      } else {
-        setParaError(null);
-      }
-    } catch (err) {
-      setParaError(err instanceof Error ? err.message : 'Failed to load para list');
-      console.error('Error fetching para data:', err);
-    } finally {
-      setParaLoading(false);
-    }
-  };
-
-  // Organize data by Para (Juz)
-  const organizeByPara = (): ParaData[] => {
+  const surahSummaries = useMemo<ListSummary[]>(() => {
     if (!quranData) return [];
-    
-    const paras: { [key: number]: ParaData } = {};
-    
-    quranData.surahs.forEach(surah => {
-      surah.ayahs.forEach(ayah => {
-        const juz = ayah.juz;
-        if (!paras[juz]) {
-          paras[juz] = { number: juz, surahs: [] };
-        }
-        
-        const existingSurah = paras[juz].surahs.find(s => s.surah.number === surah.number);
-        if (!existingSurah) {
-          paras[juz].surahs.push({
-            surah,
-            startAyah: ayah.numberInSurah,
-            endAyah: ayah.numberInSurah,
-          });
-        } else {
-          existingSurah.endAyah = Math.max(existingSurah.endAyah, ayah.numberInSurah);
-        }
+
+    return quranData.surahs.map((surah) => ({
+      id: surah.number,
+      title: surah.englishName,
+      subtitle: `${surah.revelationType} • ${surah.ayahs.length} verses`,
+      arabic: surah.name,
+      action: () =>
+        router.push({
+          pathname: '/surah-detail',
+          params: { surahNumber: surah.number.toString() },
+        }),
+    }));
+  }, [quranData, router]);
+
+  const paraSummaries = useMemo<ListSummary[]>(() => {
+    if (!quranData) return [];
+
+    const paraMap = new Map<number, { surahs: Set<number>; ayahCount: number }>();
+
+    quranData.surahs.forEach((surah) => {
+      surah.ayahs.forEach((ayah) => {
+        const juzNumber = Number(ayah.juz);
+        const current = paraMap.get(juzNumber) ?? { surahs: new Set<number>(), ayahCount: 0 };
+        current.surahs.add(surah.number);
+        current.ayahCount += 1;
+        paraMap.set(juzNumber, current);
       });
     });
-    
-    return Object.values(paras).sort((a, b) => a.number - b.number);
-  };
 
+    return Array.from(paraMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([id, value]) => ({
+        id,
+        title: `Para ${id}`,
+        subtitle: `${value.surahs.size} surahs • ${value.ayahCount} ayahs`,
+        action: () =>
+          router.push({
+            pathname: '/para-detail' as never,
+            params: { paraNumber: id.toString() } as never,
+          }),
+      }));
+  }, [quranData, router]);
 
-  const filteredSurahs = quranData?.surahs.filter(surah => 
-    surah.englishName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    surah.name.includes(searchQuery) ||
-    surah.englishNameTranslation.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  const pageSummaries = useMemo<ListSummary[]>(() => {
+    if (!quranData) return [];
 
-  const handleSurahPress = (surah: Surah) => {
-    router.push({
-      pathname: '/surah-detail',
-      params: { surahNumber: surah.number.toString() },
+    const pageMap = new Map<number, { surahs: Set<number>; ayahCount: number }>();
+
+    quranData.surahs.forEach((surah) => {
+      surah.ayahs.forEach((ayah) => {
+        const current = pageMap.get(ayah.page) ?? { surahs: new Set<number>(), ayahCount: 0 };
+        current.surahs.add(surah.number);
+        current.ayahCount += 1;
+        pageMap.set(ayah.page, current);
+      });
     });
-  };
 
-  const handleParaPress = (paraNumber: number) => {
-    router.push({
-      pathname: '/para-detail' as any,
-      params: { paraNumber: paraNumber.toString() },
+    return Array.from(pageMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([id, value]) => ({
+        id,
+        title: `Page ${id}`,
+        subtitle: `${value.surahs.size} surahs • ${value.ayahCount} ayahs`,
+      }));
+  }, [quranData]);
+
+  const hijbSummaries = useMemo<ListSummary[]>(() => {
+    if (!quranData) return [];
+
+    const hizbMap = new Map<number, { surahs: Set<number>; ayahCount: number }>();
+
+    quranData.surahs.forEach((surah) => {
+      surah.ayahs.forEach((ayah) => {
+        const hizb = Math.ceil(Number(ayah.hizbQuarter) / 4);
+        const current = hizbMap.get(hizb) ?? { surahs: new Set<number>(), ayahCount: 0 };
+        current.surahs.add(surah.number);
+        current.ayahCount += 1;
+        hizbMap.set(hizb, current);
+      });
     });
-  };
 
-  const renderSurahList = () => {
-    if (loading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
-          <Text style={styles.loadingText}>Loading Quran...</Text>
-        </View>
-      );
-    }
+    return Array.from(hizbMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([id, value]) => ({
+        id,
+        title: `Hijb ${id}`,
+        subtitle: `${value.surahs.size} surahs • ${value.ayahCount} ayahs`,
+      }));
+  }, [quranData]);
 
-    if (error) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchQuranData}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-      );
-    }
-
-    return (
-      <>
-        <Text style={styles.sectionTitle}>All Surahs ({filteredSurahs.length})</Text>
-        {filteredSurahs.map((surah) => (
-          <TouchableOpacity 
-            key={surah.number} 
-            style={styles.surahItem}
-            onPress={() => handleSurahPress(surah)}
-          >
-            <StarNumberIcon number={surah.number} />
-            
-            <View style={styles.surahInfo}>
-              <Text style={styles.surahName}>{surah.englishName}</Text>
-              <Text style={styles.surahDetails}>
-                {surah.revelationType.toUpperCase()} • {surah.ayahs.length} VERSES
-              </Text>
-            </View>
-            <Text style={styles.surahArabic}>{surah.name}</Text>
-          </TouchableOpacity>
-        ))}
-      </>
-    );
-  };
-
-  const renderParaList = () => {
-    if (paraLoading) {
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#059669" />
-          <Text style={styles.loadingText}>Loading paras...</Text>
-        </View>
-      );
-    }
-
-    if (paraError && paraSummaries.every((item) => item.surahCount === 0)) {
-      return (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{paraError}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchParaData}>
-            <Text style={styles.retryButtonText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    return (
-      <>
-        <Text style={styles.sectionTitle}>All Paras ({paraSummaries.length})</Text>
-        {!!paraError && (
-          <Text style={styles.partialWarningText}>{paraError}</Text>
-        )}
-        {paraSummaries.map((para) => (
-          <TouchableOpacity
-            key={para.number}
-            style={styles.surahItem}
-            onPress={() => handleParaPress(para.number)}
-          >
-            <StarNumberIcon number={para.number} />
-            
-            <View style={styles.surahInfo}>
-              <Text style={styles.surahName}>Para {para.number}</Text>
-                <Text style={styles.surahDetails}>
-                {para.surahCount > 0
-                  ? `${para.surahCount} ${para.surahCount === 1 ? 'Surah' : 'Surahs'}`
-                  : 'Tap to load from API'}
-                </Text>
-              </View>
-          </TouchableOpacity>
-        ))}
-      </>
-    );
-  };
-
+  const currentItems = useMemo(() => {
+    if (activeTab === 'Surah') return surahSummaries;
+    if (activeTab === 'Para') return paraSummaries;
+    if (activeTab === 'Page') return pageSummaries;
+    return hijbSummaries;
+  }, [activeTab, hijbSummaries, pageSummaries, paraSummaries, surahSummaries]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.container}>
-          {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.85}>
               <MenuIcon size={20} color="#0F172A" />
             </TouchableOpacity>
             <Text style={styles.brand}>Halakat</Text>
-            <TouchableOpacity style={styles.iconButton}>
+            <TouchableOpacity style={styles.iconButton} activeOpacity={0.85}>
               <SearchIcon size={20} color="#8B8FA9" />
             </TouchableOpacity>
           </View>
 
-          {/* Back Button and Greeting */}
-          <TouchableOpacity style={styles.backButton}>
-            <ArrowLeft size={20} color="#0F3A2B" />
-          </TouchableOpacity>
           <Text style={styles.greeting}>Asslamualaikum</Text>
 
-          {/* Last Read Banner - Similar to recite.tsx */}
-          <TouchableOpacity style={styles.lastReadCard}>
+          <TouchableOpacity style={styles.lastReadCard} activeOpacity={0.9}>
             <LinearGradient
-              colors={['#6F9A84', '#BDCCC1']}
-              style={styles.lastReadGradient}
+              colors={['#5B8A75', '#B8CBC0']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
+              style={styles.lastReadGradient}
             >
-              <View style={styles.lastReadTextContainer}>
-                <View style={styles.lastReadLabelContainer}>
+              <View style={styles.lastReadText}>
+                <View style={styles.lastReadLabelRow}>
                   <ReadQuranIcon />
                   <Text style={styles.lastReadLabel}>Last Read</Text>
                 </View>
-                <Text style={styles.lastReadSurah}>
-                  {quranData?.surahs[0] ? quranData.surahs[0].englishName : 'Al-Fatihah'}
-                </Text>
+                <Text style={styles.lastReadSurah}>Al-Fatihah</Text>
                 <Text style={styles.lastReadVerse}>Ayah No: 1</Text>
               </View>
+
               <View style={styles.lastReadIllustration}>
                 <QuranIllustration />
               </View>
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* Tabs */}
           <View style={styles.tabsContainer}>
-            {(['Surah', 'Para'] as TabType[]).map((tab) => (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.tab, activeTab === tab && styles.tabActive]}
-                onPress={() => setActiveTab(tab)}
-              >
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                  {tab}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {(['Surah', 'Para', 'Page', 'Hijb'] as TabType[]).map((tab) => {
+              const isActive = tab === activeTab;
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={styles.tabItem}
+                  activeOpacity={0.85}
+                  onPress={() => setActiveTab(tab)}
+                >
+                  <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab}</Text>
+                  {isActive ? <View style={styles.tabUnderline} /> : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
-          {/* Content List */}
-          <View style={styles.surahList}>
-            {activeTab === 'Surah' && renderSurahList()}
-            {activeTab === 'Para' && renderParaList()}
-          </View>
+          {loading ? (
+            <View style={styles.statusCard}>
+              <ActivityIndicator size="large" color="#0F6A53" />
+              <Text style={styles.statusText}>Loading Quran...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.statusCard}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : (
+            <View style={styles.listContainer}>
+              {currentItems.map((item, index) => (
+                <TouchableOpacity
+                  key={`${activeTab}-${item.id}`}
+                  style={[styles.listItem, index === currentItems.length - 1 && styles.lastListItem]}
+                  activeOpacity={item.action ? 0.82 : 1}
+                  onPress={item.action}
+                >
+                  <View style={styles.listItemLeft}>
+                    <StarNumberIcon number={item.id} />
+                    <View style={styles.listItemCopy}>
+                      <Text style={styles.listItemTitle}>{item.title}</Text>
+                      <Text style={styles.listItemSubtitle}>{item.subtitle}</Text>
+                    </View>
+                  </View>
+                  {item.arabic ? <Text style={styles.listItemArabic}>{item.arabic}</Text> : null}
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -464,20 +400,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   content: {
-    padding: 0,
+    paddingBottom: 30,
   },
   container: {
-    width: '100%',
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 20,
+    paddingTop: 14,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 20,
   },
   iconButton: {
     width: 40,
@@ -485,215 +417,166 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F2F4F7',
+    backgroundColor: '#F4F6F8',
   },
   brand: {
-    fontSize: 25,
-    color: '#0F3A2B',
+    fontSize: 24,
+    color: '#0B3727',
     fontFamily: fonts.bold,
   },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EAF4EE',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
   greeting: {
-    fontSize: 18,
+    marginTop: 22,
+    marginBottom: 16,
+    fontSize: 21,
     color: '#B7B1CE',
-    marginBottom: 20,
     fontFamily: fonts.medium,
   },
   lastReadCard: {
-    width: '100%',
-    height: 140,
-    borderRadius: 22,
+    borderRadius: 24,
     overflow: 'hidden',
-    marginBottom: 24,
-    shadowColor: '#4B6F5F',
-    shadowOpacity: 0.25,
+    shadowColor: '#497465',
+    shadowOpacity: 0.22,
     shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 18,
+    shadowRadius: 20,
     elevation: 8,
   },
   lastReadGradient: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-    borderRadius: 22,
+    height: 132,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    flexDirection: 'row',
     overflow: 'hidden',
   },
-  lastReadTextContainer: {
-    position: 'absolute',
-    width: 155,
-    height: 93,
-    left: 20,
-    top: 20,
-    paddingRight: 12,
+  lastReadText: {
+    width: 140,
+    zIndex: 1,
   },
-  lastReadLabelContainer: {
+  lastReadLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 20,
-    top: 10,
+    marginBottom: 18,
   },
   lastReadLabel: {
-    fontSize: 16,
     color: '#FFFFFF',
-    lineHeight: 20,
+    fontSize: 16,
     fontFamily: fonts.medium,
   },
   lastReadSurah: {
-    position: 'absolute',
-    left: 5,
-    top: 42,
-    width: 130,
-    fontSize: 20,
     color: '#FFFFFF',
-    lineHeight: 28,
+    fontSize: 19,
     fontFamily: fonts.semiBold,
   },
   lastReadVerse: {
-    position: 'absolute',
-    left: 5,
-    top: 76,
+    marginTop: 5,
+    color: 'rgba(255,255,255,0.88)',
     fontSize: 14,
-    color: '#FFFFFF',
-    opacity: 0.85,
-    lineHeight: 21,
     fontFamily: fonts.regular,
   },
   lastReadIllustration: {
-    position: 'absolute',
-    right: -10,
-    top: 10,
-    width: 190,
-    height: 130,
-    alignItems: 'center',
+    flex: 1,
+    marginRight: -26,
+    marginTop: -8,
     justifyContent: 'center',
   },
   tabsContainer: {
+    marginTop: 28,
+    paddingBottom: 10,
     flexDirection: 'row',
-    marginBottom: 20,
-    gap: 8,
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9EDF0',
   },
-  tab: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: '#0F3A2B',
+  tabItem: {
+    width: '24%',
+    alignItems: 'center',
+    paddingBottom: 10,
   },
   tabText: {
     fontSize: 16,
-    color: '#9CA3AF',
+    color: '#9AA3AD',
     fontFamily: fonts.medium,
   },
   tabTextActive: {
     color: '#0F3A2B',
     fontFamily: fonts.semiBold,
   },
-  surahList: {
-    flex: 1,
+  tabUnderline: {
+    position: 'absolute',
+    bottom: -11,
+    width: 52,
+    height: 3,
+    borderRadius: 999,
+    backgroundColor: '#0F3A2B',
   },
-  sectionTitle: {
-    fontSize: 18,
-    color: '#1F2937',
-    marginBottom: 16,
-    fontFamily: fonts.semiBold,
+  statusCard: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 56,
   },
-  surahItem: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+  statusText: {
+    marginTop: 14,
+    fontSize: 15,
+    color: '#667085',
+    fontFamily: fonts.regular,
+  },
+  errorText: {
+    fontSize: 15,
+    color: '#B42318',
+    textAlign: 'center',
+    fontFamily: fonts.medium,
+  },
+  listContainer: {
+    paddingTop: 14,
+  },
+  listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2F4',
+  },
+  lastListItem: {
+    borderBottomWidth: 0,
+  },
+  listItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    minWidth: 0,
   },
   starNumberContainer: {
     width: 36,
     height: 36,
+    marginRight: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
-    position: 'relative',
   },
   starNumberText: {
     position: 'absolute',
-    fontSize: 14,
-    color: '#588B76',
-    textAlign: 'center',
-    lineHeight: 36,
-    width: 36,
-  },
-  surahInfo: {
-    flex: 1,
-  },
-  surahName: {
-    fontSize: 16,
-    color: '#1F2937',
-    marginBottom: 4,
-  },
-  surahArabic: {
-    fontSize: 18,
-    color: '#0F3A2B',
-    fontFamily: fonts.arabicQuran,
-  },
-  surahDetails: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontFamily: fonts.regular,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
-    fontFamily: fonts.regular,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#EF4444',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  partialWarningText: {
-    color: '#B45309',
+    color: '#41705E',
     fontSize: 12,
-    marginBottom: 10,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semiBold,
   },
-  retryButton: {
-    backgroundColor: '#059669',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+  listItemCopy: {
+    flex: 1,
   },
-  retryButtonText: {
-    color: '#FFFFFF',
+  listItemTitle: {
+    color: '#111827',
     fontSize: 16,
-    fontFamily: fonts.medium,
+    fontFamily: fonts.semiBold,
+  },
+  listItemSubtitle: {
+    marginTop: 2,
+    color: '#7A8594',
+    fontSize: 13,
+    fontFamily: fonts.regular,
+  },
+  listItemArabic: {
+    marginLeft: 12,
+    color: '#0F3A2B',
+    fontSize: 24,
+    fontFamily: fonts.arabicQuran,
   },
 });

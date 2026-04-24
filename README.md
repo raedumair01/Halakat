@@ -90,6 +90,17 @@ npm run ios
 
 The backend provides routes for signup, login, profile fetch, profile update, and health checks. It uses MongoDB for persistence and JWT for authentication.
 
+## Deploy Backend To Vercel
+
+The backend is set up for Vercel serverless deployment through [vercel.json](/d:/d%20drive%20data/react%20native/Halakat/Halakat/vercel.json:1) and [api/index.js](/d:/d%20drive%20data/react%20native/Halakat/Halakat/api/index.js:1).
+
+Set these environment variables in Vercel before using the deployed API:
+
+- `MONGODB_URI`
+- `JWT_SECRET`
+
+After deployment, update the Expo app environment so `EXPO_PUBLIC_API_URL` points to your Vercel backend URL.
+
 ## Future Improvements
 
 - Memorization progress tracking

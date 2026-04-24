@@ -24,14 +24,28 @@ type RequestOptions = {
 };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: options.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: options.method ?? 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (error) {
+    const isNetworkError =
+      error instanceof TypeError ||
+      (error instanceof Error && /network request failed/i.test(error.message));
+
+    if (isNetworkError) {
+      throw new Error('Unable to reach the Halakat server. Please check your internet connection and make sure the app is connected to the deployed backend.');
+    }
+
+    throw error;
+  }
 
   const data = (await response.json().catch(() => null)) as
     | (T & { message?: string })

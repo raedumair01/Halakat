@@ -14,6 +14,7 @@ type AuthContextValue = {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   saveProfile: (payload: Partial<Pick<SessionUser, 'fullName' | 'bio' | 'location' | 'streakGoal'>>) => Promise<void>;
+  updateLocalProfile: (payload: Partial<Pick<SessionUser, 'fullName' | 'bio' | 'location' | 'streakGoal'>>) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -22,6 +23,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
+
+  const syncSessionUser = async (nextToken: string, nextUser: SessionUser) => {
+    setUser(nextUser);
+    await setActiveSession({ token: nextToken, user: nextUser });
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -38,8 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!isMounted) return;
 
         setToken(session.token);
-        setUser(freshUser);
-        await setActiveSession({ token: session.token, user: freshUser });
+        await syncSessionUser(session.token, freshUser);
       } catch (error) {
         console.error('Failed to restore auth session:', error);
         await clearActiveSession();
@@ -66,14 +71,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async signIn(payload) {
         const response = await login(payload);
         setToken(response.token);
-        setUser(response.user);
-        await setActiveSession({ token: response.token, user: response.user });
+        await syncSessionUser(response.token, response.user);
       },
       async signUp(payload) {
         const response = await signup(payload);
         setToken(response.token);
-        setUser(response.user);
-        await setActiveSession({ token: response.token, user: response.user });
+        await syncSessionUser(response.token, response.user);
       },
       async signOut() {
         setToken(null);
@@ -83,8 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async refreshProfile() {
         if (!token) return;
         const freshUser = await getProfile(token);
-        setUser(freshUser);
-        await setActiveSession({ token, user: freshUser });
+        await syncSessionUser(token, freshUser);
       },
       async saveProfile(payload) {
         if (!token) {
@@ -92,8 +94,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         const freshUser = await updateProfile(token, payload);
-        setUser(freshUser);
-        await setActiveSession({ token, user: freshUser });
+        await syncSessionUser(token, freshUser);
+      },
+      updateLocalProfile(payload) {
+        setUser(prev => {
+          if (!prev || !token) return prev;
+
+          const nextUser = { ...prev, ...payload };
+          void setActiveSession({ token, user: nextUser }).catch(error => {
+            console.error('Failed to sync local profile update:', error);
+          });
+          return nextUser;
+        });
       },
     }),
     [isReady, token, user]

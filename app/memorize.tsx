@@ -276,7 +276,11 @@ export default function MemorizeScreen() {
           {/* Plans Section */}
           <View style={styles.plansContainer}>
             {/* Existing Plan */}
-            <View style={styles.existingPlanContainer}>
+            <TouchableOpacity
+              style={styles.existingPlanContainer}
+              activeOpacity={0.9}
+              onPress={() => router.push('/memorize-existing')}
+            >
               <View style={styles.existingPlanBase} />
           <View style={styles.existingPlanVector}>
             {/* <ExistingPlanCurve /> */}
@@ -287,10 +291,14 @@ export default function MemorizeScreen() {
                   <ChecklistIllustration />
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
 
             {/* New Plan */}
-            <View style={styles.newPlanContainer}>
+            <TouchableOpacity
+              style={styles.newPlanContainer}
+              activeOpacity={0.9}
+              onPress={() => router.push('/memorize-new')}
+            >
               <View style={styles.newPlanBase} />
           <View style={styles.newPlanVector}>
             {/* <NewPlanCurve /> */}
@@ -301,7 +309,7 @@ export default function MemorizeScreen() {
                   <ClipboardIllustration />
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>

@@ -302,7 +302,7 @@ export default function PrayerTab() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.greeting}>Asslamualaikum</Text>

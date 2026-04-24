@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image as RNImage } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { fonts } from '../../constants/fonts';
 import { useAuth } from '../../providers/AuthProvider';
 import Svg, {
@@ -45,11 +45,20 @@ function MenuIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: str
 
 export default function HomeTab() {
   const router = useRouter();
-  const { user } = useAuth();
-  const firstName = user?.fullName?.split(' ')[0] || 'Friend';
+  const { refreshProfile, user } = useAuth();
+  const displayName = user?.fullName?.trim() || 'Friend';
+  const profileInitial = displayName.charAt(0).toUpperCase();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void refreshProfile().catch(error => {
+        console.error('Failed to refresh home profile:', error);
+      });
+    }, [refreshProfile])
+  );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <View style={styles.header}>
@@ -58,10 +67,10 @@ export default function HomeTab() {
             </TouchableOpacity>
             <View style={styles.headerCopy}>
               <Text style={styles.headerGreeting}>Assalamu alaikum,</Text>
-              <Text style={styles.brand}>{firstName}</Text>
+              <Text style={styles.brand}>{displayName}</Text>
             </View>
             <TouchableOpacity style={styles.profileChip} onPress={() => router.push('/profile')}>
-              <Text style={styles.profileInitial}>{firstName.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.profileInitial}>{profileInitial}</Text>
             </TouchableOpacity>
           </View>
 
@@ -120,7 +129,7 @@ function FeatureCard({ title, colors, Illustration }: FeatureCardProps) {
     }
 
     if (title === 'Track') {
-      router.push('/profile');
+      router.push('/track');
     }
   };
 
