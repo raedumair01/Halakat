@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { fonts } from '../constants/fonts';
 import { useAuth } from '../providers/AuthProvider';
+import { requestSignupOtp } from '../services/authApi';
 
 type AuthMode = 'login' | 'register';
 
@@ -18,12 +19,16 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [signupOtp, setSignupOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [devSignupOtp, setDevSignupOtp] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({
     fullName: '',
     email: '',
     password: '',
     confirmPassword: '',
+    signupOtp: '',
   });
 
   const isRegister = mode === 'register';
@@ -35,22 +40,23 @@ export default function AuthScreen() {
     }
   }, [isAuthenticated, isReady, router]);
 
-  const clearError = (field: 'fullName' | 'email' | 'password' | 'confirmPassword') => {
+  const clearError = (field: 'fullName' | 'email' | 'password' | 'confirmPassword' | 'signupOtp') => {
     setErrors(prev => ({ ...prev, [field]: '' }));
   };
 
-  const validateForm = () => {
+  const validateForm = ({ requireOtp = false } = {}) => {
     const nextErrors = {
       fullName: '',
       email: '',
       password: '',
       confirmPassword: '',
+      signupOtp: '',
     };
 
     const trimmedEmail = email.trim();
     const trimmedName = fullName.trim();
 
-    if (isRegister && !trimmedName) {
+    if (isRegister && !otpSent && !trimmedName) {
       nextErrors.fullName = 'Full name is required.';
     }
 
@@ -60,13 +66,15 @@ export default function AuthScreen() {
       nextErrors.email = 'Please enter a valid email address.';
     }
 
-    if (!password) {
-      nextErrors.password = 'Password is required.';
-    } else if (isRegister && password.length < minPasswordLength) {
-      nextErrors.password = `Password must be at least ${minPasswordLength} characters.`;
+    if (!isRegister || !otpSent) {
+      if (!password) {
+        nextErrors.password = 'Password is required.';
+      } else if (isRegister && password.length < minPasswordLength) {
+        nextErrors.password = `Password must be at least ${minPasswordLength} characters.`;
+      }
     }
 
-    if (isRegister) {
+    if (isRegister && !otpSent) {
       if (!confirmPassword) {
         nextErrors.confirmPassword = 'Please confirm your password.';
       } else if (confirmPassword !== password) {
@@ -74,27 +82,52 @@ export default function AuthScreen() {
       }
     }
 
+    if (isRegister && requireOtp && !signupOtp.trim()) {
+      nextErrors.signupOtp = 'Verification code is required.';
+    }
+
     setErrors(nextErrors);
-    return !nextErrors.fullName && !nextErrors.email && !nextErrors.password && !nextErrors.confirmPassword;
+    return !nextErrors.fullName && !nextErrors.email && !nextErrors.password && !nextErrors.confirmPassword && !nextErrors.signupOtp;
   };
 
   const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
-    setErrors({ fullName: '', email: '', password: '', confirmPassword: '' });
+    setOtpSent(false);
+    setSignupOtp('');
+    setDevSignupOtp('');
+    setErrors({ fullName: '', email: '', password: '', confirmPassword: '', signupOtp: '' });
+  };
+
+  const handleRequestSignupOtp = async () => {
+    const response = await requestSignupOtp({
+      fullName: fullName.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+    });
+    setOtpSent(true);
+    setDevSignupOtp(response.otp ?? '');
+    if (response.otp) {
+      setSignupOtp(response.otp);
+    }
+    Alert.alert('Check your email', response.message);
   };
 
   const handleContinue = async () => {
-    if (!validateForm()) {
+    if (!validateForm({ requireOtp: otpSent })) {
       return;
     }
 
     try {
       setSubmitting(true);
       if (isRegister) {
+        if (!otpSent) {
+          await handleRequestSignupOtp();
+          return;
+        }
+
         await signUp({
-          fullName: fullName.trim(),
           email: email.trim().toLowerCase(),
-          password,
+          otp: signupOtp.trim(),
         });
       } else {
         await signIn({
@@ -141,7 +174,24 @@ export default function AuthScreen() {
           </View>
 
           <View style={styles.form}>
-            {isRegister && (
+            {isRegister && otpSent && (
+              <View style={styles.otpHeader}>
+                <Text style={styles.otpTitle}>Enter the code we sent</Text>
+                <Text style={styles.otpSubtitle}>Check {email.trim().toLowerCase()} for your 6-digit Halakat verification code.</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setOtpSent(false);
+                    setSignupOtp('');
+                    setDevSignupOtp('');
+                    clearError('signupOtp');
+                  }}
+                >
+                  <Text style={styles.helperLink}>Edit signup details</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {isRegister && !otpSent && (
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Full name</Text>
                 <TextInput
@@ -168,6 +218,7 @@ export default function AuthScreen() {
                 placeholder={isRegister ? 'example@gmail.com' : 'Your email'}
                 placeholderTextColor="#9CA3AF"
                 autoCapitalize="none"
+                editable={!isRegister || !otpSent}
                 value={email}
                 onChangeText={value => {
                   setEmail(value);
@@ -179,11 +230,12 @@ export default function AuthScreen() {
               {!!errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
             </View>
 
+            {(!isRegister || !otpSent) && (
             <View style={styles.fieldGroup}>
               <View style={styles.labelRow}>
                 <Text style={styles.label}>{isRegister ? 'Create a password' : 'Password'}</Text>
                 {!isRegister && (
-                  <TouchableOpacity>
+                  <TouchableOpacity onPress={() => router.push('/forgot-password')}>
                     <Text style={styles.helperLink}>Forgot password?</Text>
                   </TouchableOpacity>
                 )}
@@ -212,8 +264,9 @@ export default function AuthScreen() {
               </View>
               {!!errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
             </View>
+            )}
 
-            {isRegister && (
+            {isRegister && !otpSent && (
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Confirm password</Text>
                 <View style={[styles.inputWithIcon, errors.confirmPassword && styles.inputError]}>
@@ -241,13 +294,65 @@ export default function AuthScreen() {
                 {!!errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword}</Text>}
               </View>
             )}
+
+            {isRegister && otpSent && (
+              <>
+                {!!devSignupOtp && (
+                  <View style={styles.devBox}>
+                    <Text style={styles.devLabel}>Development verification code</Text>
+                    <Text style={styles.devCode}>{devSignupOtp}</Text>
+                  </View>
+                )}
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.label}>Email verification code</Text>
+                  <TextInput
+                    style={[styles.input, errors.signupOtp && styles.inputError]}
+                    keyboardType="number-pad"
+                    placeholder="6-digit code"
+                    placeholderTextColor="#9CA3AF"
+                    value={signupOtp}
+                    onChangeText={value => {
+                      setSignupOtp(value);
+                      if (errors.signupOtp) {
+                        clearError('signupOtp');
+                      }
+                    }}
+                  />
+                  {!!errors.signupOtp && <Text style={styles.errorText}>{errors.signupOtp}</Text>}
+                </View>
+              </>
+            )}
           </View>
 
           <TouchableOpacity style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]} onPress={handleContinue} disabled={submitting}>
             <Text style={styles.primaryButtonText}>
-              {submitting ? 'Please wait...' : isRegister ? 'Create account' : 'Sign in'}
+              {submitting ? 'Please wait...' : isRegister ? otpSent ? 'Verify and create account' : 'Send verification code' : 'Sign in'}
             </Text>
           </TouchableOpacity>
+
+          {isRegister && otpSent && (
+            <TouchableOpacity
+              style={[styles.resendButton, submitting && styles.primaryButtonDisabled]}
+              onPress={async () => {
+                if (!validateForm()) {
+                  return;
+                }
+
+                try {
+                  setSubmitting(true);
+                  await handleRequestSignupOtp();
+                } catch (error) {
+                  Alert.alert('Code failed', error instanceof Error ? error.message : 'Please try again.');
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+              disabled={submitting}
+            >
+              <Text style={styles.resendButtonText}>Send another code</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.highlights}>
             <Text style={styles.highlightsTitle}>With your account you can:</Text>
@@ -344,6 +449,25 @@ const styles = StyleSheet.create({
   form: {
     gap: 20,
   },
+  otpHeader: {
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#F5FAF7',
+    borderWidth: 1,
+    borderColor: '#D8EADD',
+    gap: 8,
+  },
+  otpTitle: {
+    fontSize: 18,
+    color: '#0F3A2B',
+    fontFamily: fonts.bold,
+  },
+  otpSubtitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#5F6B66',
+    fontFamily: fonts.regular,
+  },
   fieldGroup: {
     gap: 8,
   },
@@ -410,6 +534,34 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontFamily: fonts.semiBold,
+  },
+  resendButton: {
+    marginTop: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  resendButtonText: {
+    color: '#059669',
+    fontSize: 15,
+    fontFamily: fonts.semiBold,
+  },
+  devBox: {
+    padding: 16,
+    borderRadius: 18,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    gap: 4,
+  },
+  devLabel: {
+    color: '#9A3412',
+    fontSize: 13,
+    fontFamily: fonts.semiBold,
+  },
+  devCode: {
+    color: '#7C2D12',
+    fontSize: 22,
+    fontFamily: fonts.bold,
   },
   highlights: {
     marginTop: 24,

@@ -10,7 +10,7 @@ type AuthContextValue = {
   user: SessionUser | null;
   token: string | null;
   signIn: (payload: { email: string; password: string }) => Promise<void>;
-  signUp: (payload: { fullName: string; email: string; password: string }) => Promise<void>;
+  signUp: (payload: { email: string; otp: string }) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   saveProfile: (payload: Partial<Pick<SessionUser, 'fullName' | 'bio' | 'location' | 'streakGoal'>>) => Promise<void>;

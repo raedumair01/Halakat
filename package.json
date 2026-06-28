@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "EXPO_NO_TELEMETRY=1 expo start",
+    "dev": "expo start",
+    "start": "expo start",
     "server": "node server/index.js",
     "build:web": "expo export --platform web",
     "eas:build:apk": "eas build --platform android --profile apk",
@@ -49,6 +50,7 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react-native": "^0.544.0",
     "mongoose": "^9.4.1",
+    "nodemailer": "^8.0.7",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
