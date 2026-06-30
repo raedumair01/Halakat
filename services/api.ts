@@ -40,11 +40,7 @@ function resolveBaseUrl() {
   const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 
   if (!configuredUrl) {
-    if (!__DEV__) {
-      return PRODUCTION_API_URL;
-    }
-
-    return getDefaultBaseUrl();
+    return PRODUCTION_API_URL;
   }
 
   try {

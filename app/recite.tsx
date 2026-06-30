@@ -72,12 +72,18 @@ const MIN_VALID_DURATION = 1.0;
 const NOTHING_THRESHOLD = 0.5;
 const AYAH_MATCH_THRESHOLD = 0.62;
 const DEFAULT_SURAH_NUMBER = 1;
+const BISMILLAH_NORMALIZED = '\u0628\u0633\u0645 \u0627\u0644\u0644\u0647 \u0627\u0644\u0631\u062d\u0645\u0646 \u0627\u0644\u0631\u062d\u064a\u0645';
 
 const normalizeArabicText = (text: string) => {
   return text
     .toLowerCase()
     .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, '')
     .replace(/\u0640/g, '')
+    .replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627')
+    .replace(/\u0649/g, '\u064A')
+    .replace(/\u0624/g, '\u0648')
+    .replace(/\u0626/g, '\u064A')
+    .replace(/\u0629/g, '\u0647')
     .replace(/[إأآٱ]/g, 'ا')
     .replace(/ى/g, 'ي')
     .replace(/ؤ/g, 'و')
@@ -87,6 +93,49 @@ const normalizeArabicText = (text: string) => {
     .replace(/[^\u0621-\u063A\u0641-\u064A\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+};
+
+const splitLeadingBismillah = (text: string) => {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  const normalized = normalizeArabicText(text);
+
+  if (!normalized.startsWith(BISMILLAH_NORMALIZED) || tokens.length <= 4) {
+    return null;
+  }
+
+  return {
+    bismillah: tokens.slice(0, 4).join(' '),
+    remaining: tokens.slice(4).join(' ').trim(),
+  };
+};
+
+const prepareSurahForRecitation = (surah: SurahData): SurahData => {
+  if (surah.number === 1 || surah.ayahs.length === 0) {
+    return surah;
+  }
+
+  const [firstAyah, ...restAyahs] = surah.ayahs;
+  const split = splitLeadingBismillah(firstAyah.text);
+
+  if (!split?.remaining) {
+    return surah;
+  }
+
+  return {
+    ...surah,
+    ayahs: [
+      {
+        ...firstAyah,
+        numberInSurah: 0,
+        text: split.bismillah,
+      },
+      {
+        ...firstAyah,
+        text: split.remaining,
+      },
+      ...restAyahs,
+    ],
+  };
 };
 
 const levenshteinDistance = (a: string, b: string) => {
@@ -365,7 +414,7 @@ export default function ReciteScreen() {
   const loadSurahByNumber = async (surahNumber: number) => {
     try {
       setIsSurahLoading(true);
-      const data = await fetchSurahArabic<SurahData>(surahNumber);
+      const data = prepareSurahForRecitation(await fetchSurahArabic<SurahData>(surahNumber));
       setSurahData(data);
       setCurrentAyahIndex(0);
       setCompletedVerses(new Set());

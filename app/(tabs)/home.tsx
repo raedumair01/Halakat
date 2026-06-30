@@ -128,6 +128,16 @@ function FeatureCard({ title, colors, Illustration }: FeatureCardProps) {
       return;
     }
 
+    if (title === 'Recite') {
+      router.push('/recite');
+      return;
+    }
+
+    if (title === 'Retain') {
+      router.push('/memorize-existing');
+      return;
+    }
+
     if (title === 'Track') {
       router.push('/track');
     }
@@ -136,7 +146,7 @@ function FeatureCard({ title, colors, Illustration }: FeatureCardProps) {
   return (
     <TouchableOpacity
       onPress={handlePress}
-      activeOpacity={title === 'Recite' || title === 'Retain' ? 1 : 0.9}
+      activeOpacity={0.9}
       style={styles.cardContentWrapper}
     >
       <LinearGradient colors={colors} style={styles.featureCard} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
