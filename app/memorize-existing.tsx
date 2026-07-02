@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { fonts } from '../constants/fonts';
 import { setActiveMemorizePlan, type ExistingPlanId } from '../services/memorizePlanSession';
+import { recordRetentionProgress } from '../services/practiceProgress';
 
 const EXISTING_PLANS = [
   {
@@ -35,6 +36,16 @@ const EXISTING_PLANS = [
     buttonTextColor: '#0B1D2D',
   },
 ];
+
+const EXISTING_PLAN_PAGES_PER_DAY: Record<ExistingPlanId, number> = {
+  focused: 3,
+  balanced: 2,
+  steady: 1,
+};
+
+function pagesToVerses(pages: number) {
+  return Math.max(1, Math.round(pages * 15));
+}
 
 function HeaderIcon({ direction = 'left' }: { direction?: 'left' | 'right' }) {
   if (direction === 'right') {
@@ -122,6 +133,7 @@ export default function MemorizeExistingScreen() {
                     onPress={async () => {
                       try {
                         await setActiveMemorizePlan({ kind: 'existing', id: plan.id as ExistingPlanId });
+                        await recordRetentionProgress(pagesToVerses(EXISTING_PLAN_PAGES_PER_DAY[plan.id as ExistingPlanId]));
                         router.push('/track');
                       } catch (error) {
                         Alert.alert('Unable to start plan', error instanceof Error ? error.message : 'Please try again.');

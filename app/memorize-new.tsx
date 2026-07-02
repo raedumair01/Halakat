@@ -5,11 +5,16 @@ import { useRouter } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { fonts } from '../constants/fonts';
 import { setActiveMemorizePlan } from '../services/memorizePlanSession';
+import { recordMemorizationProgress } from '../services/practiceProgress';
 
 const LEVELS = ['1-5', '5-10', '10-15', '15-20', '20-25', '25-30', '30-35', '35-40', '40-45', '45-50', '50-55', '+55'];
 const PAGES_PER_DAY = ['0.25', '0.5', '0.75', '1', '1.5', '2'];
 const TIME_PER_DAY = ['1-5', '5-15', '15-30', '30-45', '45-60', '+60'];
 const ORDER_OPTIONS = ['Random', 'Increasing', 'Decreasing', 'Specific'];
+
+function pagesToVerses(pages: string) {
+  return Math.max(1, Math.round((Number(pages) || 1) * 15));
+}
 
 function HeaderIcon({ direction = 'left' }: { direction?: 'left' | 'right' }) {
   if (direction === 'right') {
@@ -139,6 +144,7 @@ export default function MemorizeNewScreen() {
                 minutesPerDay,
                 order,
               });
+              await recordMemorizationProgress(pagesToVerses(pagesPerDay));
               router.push('/track');
             } catch (error) {
               Alert.alert('Unable to start plan', error instanceof Error ? error.message : 'Please try again.');

@@ -21,6 +21,65 @@ const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD?.trim();
 app.use(cors());
 app.use(express.json());
 
+function formatLocalIsoDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function createEmptyPracticeProgress() {
+  return {
+    daily: {},
+    totals: {
+      recitedVerses: 0,
+      memorizedVerses: 0,
+      retainedVerses: 0,
+      reciteSessions: 0,
+      memorizeSessions: 0,
+      retainSessions: 0,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function normalizeDayStats(day, date) {
+  return {
+    date,
+    recitedVerses: day?.recitedVerses ?? 0,
+    memorizedVerses: day?.memorizedVerses ?? 0,
+    retainedVerses: day?.retainedVerses ?? 0,
+    reciteSessions: day?.reciteSessions ?? 0,
+    memorizeSessions: day?.memorizeSessions ?? 0,
+    retainSessions: day?.retainSessions ?? 0,
+    updatedAt: day?.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+function normalizePracticeProgress(progress) {
+  const empty = createEmptyPracticeProgress();
+  const source = progress && typeof progress === 'object' ? progress : empty;
+  const dailySource = source.daily && typeof source.daily === 'object' ? source.daily : {};
+  const daily = {};
+
+  Object.entries(dailySource).forEach(([date, day]) => {
+    daily[date] = normalizeDayStats(day, date);
+  });
+
+  return {
+    daily,
+    totals: {
+      recitedVerses: source.totals?.recitedVerses ?? 0,
+      memorizedVerses: source.totals?.memorizedVerses ?? 0,
+      retainedVerses: source.totals?.retainedVerses ?? 0,
+      reciteSessions: source.totals?.reciteSessions ?? 0,
+      memorizeSessions: source.totals?.memorizeSessions ?? 0,
+      retainSessions: source.totals?.retainSessions ?? 0,
+    },
+    updatedAt: source.updatedAt ?? empty.updatedAt,
+  };
+}
+
 const userSchema = new mongoose.Schema(
   {
     fullName: {
@@ -72,6 +131,10 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
+    },
+    practiceProgress: {
+      type: mongoose.Schema.Types.Mixed,
+      default: createEmptyPracticeProgress,
     },
   },
   {
@@ -516,6 +579,77 @@ app.patch('/auth/profile', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Profile update failed:', error);
     return res.status(500).json({ message: 'Unable to update profile right now.' });
+  }
+});
+
+app.get('/progress', authMiddleware, async (req, res) => {
+  const progress = normalizePracticeProgress(req.user.practiceProgress);
+
+  if (JSON.stringify(progress) !== JSON.stringify(req.user.practiceProgress ?? {})) {
+    req.user.practiceProgress = progress;
+    await req.user.save();
+  }
+
+  return res.json({ progress });
+});
+
+app.post('/progress/activity', authMiddleware, async (req, res) => {
+  try {
+    const { type, versesCompleted, date } = req.body ?? {};
+    const activityType = typeof type === 'string' ? type.trim() : '';
+    const count = Number(versesCompleted);
+    const activityDate = typeof date === 'string' ? date.trim() : '';
+
+    if (!['recite', 'memorize', 'retain'].includes(activityType)) {
+      return res.status(400).json({ message: 'Activity type must be recite, memorize, or retain.' });
+    }
+
+    if (!Number.isFinite(count) || count <= 0) {
+      return res.status(400).json({ message: 'Verses completed must be a positive number.' });
+    }
+
+    if (activityDate && !/^\d{4}-\d{2}-\d{2}$/.test(activityDate)) {
+      return res.status(400).json({ message: 'Date must use YYYY-MM-DD format.' });
+    }
+
+    const verses = Math.max(1, Math.round(count));
+    const today = activityDate || formatLocalIsoDate(new Date());
+    const now = new Date().toISOString();
+    const progress = normalizePracticeProgress(req.user.practiceProgress);
+    const currentDay = normalizeDayStats(progress.daily[today], today);
+
+    if (activityType === 'recite') {
+      currentDay.recitedVerses += verses;
+      currentDay.reciteSessions += 1;
+      progress.totals.recitedVerses += verses;
+      progress.totals.reciteSessions += 1;
+    }
+
+    if (activityType === 'memorize') {
+      currentDay.memorizedVerses += verses;
+      currentDay.memorizeSessions += 1;
+      progress.totals.memorizedVerses += verses;
+      progress.totals.memorizeSessions += 1;
+      req.user.memorizedVerses = (req.user.memorizedVerses ?? 0) + verses;
+    }
+
+    if (activityType === 'retain') {
+      currentDay.retainedVerses += verses;
+      currentDay.retainSessions += 1;
+      progress.totals.retainedVerses += verses;
+      progress.totals.retainSessions += 1;
+    }
+
+    currentDay.updatedAt = now;
+    progress.daily[today] = currentDay;
+    progress.updatedAt = now;
+    req.user.practiceProgress = progress;
+
+    await req.user.save();
+    return res.json({ progress, user: formatUser(req.user) });
+  } catch (error) {
+    console.error('Progress update failed:', error);
+    return res.status(500).json({ message: 'Unable to update progress right now.' });
   }
 });
 

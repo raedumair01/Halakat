@@ -249,52 +249,7 @@ export default function TrackScreen() {
   );
 
   const planMetrics = useMemo(() => getPlanMetrics(activePlan), [activePlan]);
-  const todayIso = formatIsoDate(today);
-  const todayStats = practiceProgress?.daily[todayIso];
-  const effectiveMemorizedVerses = (todayStats?.memorizedVerses ?? 0) > 0
-    ? (todayStats?.memorizedVerses ?? 0)
-    : (todayStats?.recitedVerses ?? 0);
   const targetVerses = planMetrics ? pagesToVerses(planMetrics.pagesPerDay) : 0;
-  const weeklyTargetDays = planMetrics?.daysPerWeek ?? 0;
-
-  const weeklyCompletedDays = useMemo(() => {
-    if (!practiceProgress) return 0;
-
-    return Object.values(practiceProgress.daily).filter(day => {
-      if (day.date < formatIsoDate(startOfWeek(today)) || day.date > formatIsoDate(addDays(startOfWeek(today), 6))) {
-        return false;
-      }
-
-      return day.recitedVerses > 0 || day.memorizedVerses > 0;
-    }).length;
-  }, [practiceProgress, today]);
-
-  const progressItems = useMemo<ProgressItem[]>(
-    () => [
-      {
-        title: 'Memorization',
-        percent: getPlanPercent(effectiveMemorizedVerses, targetVerses || 1),
-        color: '#60DEC0',
-        accent: 'rgba(43, 210, 171, 0.75)',
-        Icon: BrainIcon,
-      },
-      {
-        title: 'Reciting',
-        percent: getPlanPercent(todayStats?.recitedVerses ?? 0, targetVerses || 1),
-        color: '#8C8CD8',
-        accent: 'rgba(118, 118, 209, 0.84)',
-        Icon: UsersIcon,
-      },
-      {
-        title: 'Retaining',
-        percent: getPlanPercent(weeklyCompletedDays, weeklyTargetDays || 1),
-        color: '#FC8648',
-        accent: 'rgba(251, 102, 23, 0.79)',
-        Icon: CycleIcon,
-      },
-    ],
-    [effectiveMemorizedVerses, targetVerses, todayStats?.recitedVerses, weeklyCompletedDays, weeklyTargetDays]
-  );
 
   const days = useMemo<CalendarDay[]>(() => {
     const weekStart = startOfWeek(today);
@@ -310,7 +265,11 @@ export default function TrackScreen() {
         iso,
         isToday: iso === formatIsoDate(today),
         isPlanned: isPlannedStudyDay(date, activePlan, planMetrics),
-        hasActivity: Boolean(practiceProgress?.daily[iso]?.recitedVerses || practiceProgress?.daily[iso]?.memorizedVerses),
+        hasActivity: Boolean(
+          practiceProgress?.daily[iso]?.recitedVerses ||
+          practiceProgress?.daily[iso]?.memorizedVerses ||
+          practiceProgress?.daily[iso]?.retainedVerses
+        ),
       };
     });
   }, [activePlan, planMetrics, practiceProgress, today]);
@@ -326,6 +285,39 @@ export default function TrackScreen() {
   const selectedDayPlanText = selectedDay?.isPlanned
     ? `${planMetrics?.pagesPerDay ?? 0} page${planMetrics?.pagesPerDay === 1 ? '' : 's'} planned`
     : 'Recovery / catch-up day';
+  const effectiveSelectedMemorizedVerses = selectedStats?.memorizedVerses ?? 0;
+
+  const progressItems = useMemo<ProgressItem[]>(
+    () => [
+      {
+        title: 'Memorization',
+        percent: getPlanPercent(effectiveSelectedMemorizedVerses, targetVerses || 1),
+        color: '#60DEC0',
+        accent: 'rgba(43, 210, 171, 0.75)',
+        Icon: BrainIcon,
+      },
+      {
+        title: 'Reciting',
+        percent: getPlanPercent(selectedStats?.recitedVerses ?? 0, targetVerses || 1),
+        color: '#8C8CD8',
+        accent: 'rgba(118, 118, 209, 0.84)',
+        Icon: UsersIcon,
+      },
+      {
+        title: 'Retaining',
+        percent: getPlanPercent(selectedStats?.retainedVerses ?? 0, targetVerses || 1),
+        color: '#FC8648',
+        accent: 'rgba(251, 102, 23, 0.79)',
+        Icon: CycleIcon,
+      },
+    ],
+    [
+      effectiveSelectedMemorizedVerses,
+      selectedStats?.recitedVerses,
+      selectedStats?.retainedVerses,
+      targetVerses,
+    ]
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -397,7 +389,7 @@ export default function TrackScreen() {
               <Text style={styles.calendarMetaTitle}>{selectedDay?.isToday ? 'Today' : `${selectedDay?.label} plan`}</Text>
               <Text style={styles.calendarMetaBody}>
                 {activePlan
-                  ? `${selectedDayPlanText}. Recited ${selectedStats?.recitedVerses ?? 0} verses and memorized ${selectedStats?.memorizedVerses ?? 0} verses.`
+                  ? `${selectedDayPlanText}. Recited ${selectedStats?.recitedVerses ?? 0} verses, memorized ${selectedStats?.memorizedVerses ?? 0} verses, and retained ${selectedStats?.retainedVerses ?? 0} verses.`
                   : 'Start a memorize plan to populate your weekly calendar and targets.'}
               </Text>
             </View>
