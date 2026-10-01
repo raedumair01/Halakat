@@ -653,11 +653,9 @@ app.post('/progress/activity', authMiddleware, async (req, res) => {
   }
 });
 
-let cachedConnection = global.__halakatMongoConnection;
-
 function validateRuntimeConfig() {
-  if (isVercel && (!process.env.MONGODB_URI || MONGODB_URI === localMongoUri)) {
-    throw new Error('Missing Vercel MONGODB_URI. Set a hosted MongoDB connection string in the Vercel project environment variables.');
+  if (isVercel && (!process.env.MONGODB_URI || MONGODB_URI === localMongoUri || MONGODB_URI.includes('localhost') || MONGODB_URI.includes('127.0.0.1'))) {
+    throw new Error('Missing Vercel MONGODB_URI. Set a hosted MongoDB Atlas connection string in the Vercel project environment variables.');
   }
 
   if (isVercel && (!process.env.JWT_SECRET || JWT_SECRET === 'halakat-dev-secret')) {
@@ -668,12 +666,16 @@ function validateRuntimeConfig() {
 async function connectToDatabase() {
   validateRuntimeConfig();
 
-  if (!cachedConnection) {
-    cachedConnection = mongoose.connect(MONGODB_URI);
-    global.__halakatMongoConnection = cachedConnection;
+  if (mongoose.connection.readyState === 1) {
+    return;
   }
 
-  await cachedConnection;
+  if (mongoose.connection.readyState === 2) {
+    await mongoose.connection.asPromise();
+    return;
+  }
+
+  await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 8000 });
 }
 
 module.exports = {

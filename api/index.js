@@ -6,6 +6,9 @@ module.exports = async function handler(req, res) {
     return app(req, res);
   } catch (error) {
     console.error('Vercel request failed:', error);
-    return res.status(500).json({ message: 'Backend is unavailable right now.' });
+    const reason = error instanceof Error ? error.message : 'Unknown error';
+    return res.status(500).json({
+      message: `Backend is unavailable right now. ${reason}`,
+    });
   }
 };
