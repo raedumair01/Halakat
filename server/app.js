@@ -761,7 +761,7 @@ function validateRuntimeConfig() {
     throw new Error('Missing Vercel MONGODB_URI. Set a hosted MongoDB Atlas connection string in the Vercel project environment variables.');
   }
 
-  if (!process.env.JWT_SECRET || JWT_SECRET === 'halakat-dev-secret') {
+  if ((isVercel || process.env.NODE_ENV === 'production') && (!process.env.JWT_SECRET || JWT_SECRET === 'halakat-dev-secret')) {
     throw new Error('Missing Vercel JWT_SECRET. Set a secure JWT secret in the Vercel project environment variables.');
   }
 }
