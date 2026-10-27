@@ -144,6 +144,74 @@ const userSchema = new mongoose.Schema(
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
+// Each login creates a distinct server-side session. Revocation is checked on
+// every authenticated request, so logout/password reset takes effect immediately.
+const authSessionSchema = new mongoose.Schema(
+  {
+    sessionId: { type: String, required: true, unique: true, index: true },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    expiresAt: { type: Date, required: true },
+    revokedAt: { type: Date, default: null },
+  },
+  { timestamps: true }
+);
+authSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+const AuthSession = mongoose.models.AuthSession || mongoose.model('AuthSession', authSessionSchema);
+
+// Database-backed fixed-window counters work across serverless instances.
+const authRateLimitSchema = new mongoose.Schema({
+  key: { type: String, required: true, unique: true },
+  windowStartedAt: { type: Date, required: true },
+  count: { type: Number, required: true, default: 0 },
+  expiresAt: { type: Date, required: true },
+});
+authRateLimitSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+const AuthRateLimit = mongoose.models.AuthRateLimit || mongoose.model('AuthRateLimit', authRateLimitSchema);
+
+function authRateLimit(maxRequests, windowMs = 15 * 60 * 1000) {
+  return async (req, res, next) => {
+    try {
+      const now = new Date();
+      const cutoff = new Date(now.getTime() - windowMs);
+      const key = `${req.path}:${req.ip || 'unknown'}`;
+      const expiredWindow = {
+        $lte: [{ $ifNull: ['$windowStartedAt', new Date(0)] }, cutoff],
+      };
+      const bucket = await AuthRateLimit.findOneAndUpdate(
+        { key },
+        [
+          {
+            $set: {
+              windowStartedAt: { $cond: [expiredWindow, now, '$windowStartedAt'] },
+              count: {
+                $cond: [expiredWindow, 1, { $add: [{ $ifNull: ['$count', 0] }, 1] }],
+              },
+              expiresAt: {
+                $dateAdd: {
+                  startDate: { $cond: [expiredWindow, now, '$windowStartedAt'] },
+                  unit: 'millisecond',
+                  amount: windowMs,
+                },
+              },
+            },
+          },
+        ],
+        { upsert: true, new: true }
+      );
+
+      if (bucket.count > maxRequests) {
+        res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
+        return res.status(429).json({ message: 'Too many attempts. Please wait before trying again.' });
+      }
+
+      return next();
+    } catch (error) {
+      console.error('Authentication rate-limit check failed:', error);
+      return res.status(503).json({ message: 'Authentication is temporarily unavailable. Please try again.' });
+    }
+  };
+}
+
 const signupVerificationSchema = new mongoose.Schema(
   {
     fullName: {
@@ -180,8 +248,14 @@ const signupVerificationSchema = new mongoose.Schema(
 const SignupVerification =
   mongoose.models.SignupVerification || mongoose.model('SignupVerification', signupVerificationSchema);
 
-function createToken(userId) {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
+async function createAuthSession(userId) {
+  const sessionId = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  await AuthSession.create({ sessionId, userId, expiresAt });
+  const token = jwt.sign({ userId, sid: sessionId }, JWT_SECRET, { expiresIn: '7d' });
+
+  return { token, sessionId };
 }
 
 function hashOtp(token) {
@@ -299,13 +373,28 @@ async function authMiddleware(req, res, next) {
   try {
     const token = authorization.replace('Bearer ', '').trim();
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await User.findById(decoded.userId);
+    if (typeof decoded.sid !== 'string' || typeof decoded.userId !== 'string') {
+      return res.status(401).json({ message: 'Session is no longer valid. Please sign in again.' });
+    }
 
+    const session = await AuthSession.findOne({
+      sessionId: decoded.sid,
+      userId: decoded.userId,
+      revokedAt: null,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!session) {
+      return res.status(401).json({ message: 'Session has expired or been revoked. Please sign in again.' });
+    }
+
+    const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(401).json({ message: 'Session is no longer valid.' });
     }
 
     req.user = user;
+    req.authSessionId = decoded.sid;
     return next();
   } catch (_error) {
     return res.status(401).json({ message: 'Invalid authorization token.' });
@@ -320,7 +409,7 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, database: 'Halakat' });
 });
 
-app.post('/auth/signup/request-otp', async (req, res) => {
+app.post('/auth/signup/request-otp', authRateLimit(3), async (req, res) => {
   try {
     const { fullName, email, password } = req.body ?? {};
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -390,7 +479,7 @@ app.post('/auth/signup/request-otp', async (req, res) => {
   }
 });
 
-app.post('/auth/signup', async (req, res) => {
+app.post('/auth/signup', authRateLimit(5), async (req, res) => {
   try {
     const { email, otp } = req.body ?? {};
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -424,7 +513,7 @@ app.post('/auth/signup', async (req, res) => {
     });
     await SignupVerification.deleteOne({ email: normalizedEmail });
 
-    const token = createToken(user._id.toString());
+    const { token } = await createAuthSession(user._id.toString());
     return res.status(201).json({ token, user: formatUser(user) });
   } catch (error) {
     console.error('Signup failed:', error);
@@ -432,7 +521,7 @@ app.post('/auth/signup', async (req, res) => {
   }
 });
 
-app.post('/auth/login', async (req, res) => {
+app.post('/auth/login', authRateLimit(5), async (req, res) => {
   try {
     const { email, password } = req.body ?? {};
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -451,7 +540,7 @@ app.post('/auth/login', async (req, res) => {
       return res.status(401).json({ message: 'Incorrect email or password.' });
     }
 
-    const token = createToken(user._id.toString());
+    const { token } = await createAuthSession(user._id.toString());
     return res.json({ token, user: formatUser(user) });
   } catch (error) {
     console.error('Login failed:', error);
@@ -459,7 +548,7 @@ app.post('/auth/login', async (req, res) => {
   }
 });
 
-app.post('/auth/forgot-password', async (req, res) => {
+app.post('/auth/forgot-password', authRateLimit(3), async (req, res) => {
   try {
     const { email } = req.body ?? {};
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -512,7 +601,7 @@ app.post('/auth/forgot-password', async (req, res) => {
   }
 });
 
-app.post('/auth/reset-password', async (req, res) => {
+app.post('/auth/reset-password', authRateLimit(5), async (req, res) => {
   try {
     const { email, resetToken, password } = req.body ?? {};
     const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -543,11 +632,25 @@ app.post('/auth/reset-password', async (req, res) => {
     user.passwordResetExpiresAt = null;
     await user.save();
 
-    return res.json({ message: 'Password has been reset. You can now sign in.' });
+    // A password reset invalidates every existing device session.
+    await AuthSession.updateMany(
+      { userId: user._id, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
+
+    return res.json({ message: 'Password has been reset. Please sign in again on your devices.' });
   } catch (error) {
     console.error('Reset password failed:', error);
     return res.status(500).json({ message: 'Unable to reset password right now.' });
   }
+});
+
+app.post('/auth/logout', authMiddleware, async (req, res) => {
+  await AuthSession.updateOne(
+    { sessionId: req.authSessionId, revokedAt: null },
+    { $set: { revokedAt: new Date() } }
+  );
+  return res.json({ message: 'Signed out successfully.' });
 });
 
 app.get('/auth/profile', authMiddleware, async (req, res) => {
@@ -658,7 +761,7 @@ function validateRuntimeConfig() {
     throw new Error('Missing Vercel MONGODB_URI. Set a hosted MongoDB Atlas connection string in the Vercel project environment variables.');
   }
 
-  if (isVercel && (!process.env.JWT_SECRET || JWT_SECRET === 'halakat-dev-secret')) {
+  if ((isVercel || process.env.NODE_ENV === 'production') && (!process.env.JWT_SECRET || JWT_SECRET === 'halakat-dev-secret')) {
     throw new Error('Missing Vercel JWT_SECRET. Set a secure JWT secret in the Vercel project environment variables.');
   }
 }

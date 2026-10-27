@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { clearActiveSession, getActiveSession, setActiveSession } from '../services/authSession';
-import { getProfile, login, signup, updateProfile, type UserProfile } from '../services/authApi';
+import { getProfile, login, logout, signup, updateProfile, type UserProfile } from '../services/authApi';
 
 type SessionUser = UserProfile;
 
@@ -79,9 +79,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await syncSessionUser(response.token, response.user);
       },
       async signOut() {
-        setToken(null);
-        setUser(null);
-        await clearActiveSession();
+        const activeToken = token;
+        // Always clear local credentials even if the device is offline.
+        try {
+          if (activeToken) {
+            await logout(activeToken);
+          }
+        } catch (error) {
+          console.warn('Server logout could not be confirmed:', error);
+        } finally {
+          setToken(null);
+          setUser(null);
+          await clearActiveSession();
+        }
       },
       async refreshProfile() {
         if (!token) return;
