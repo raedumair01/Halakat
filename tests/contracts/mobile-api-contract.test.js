@@ -20,13 +20,13 @@ const authRoutes = [
 
 test('mobile auth client and backend expose matching authentication routes', () => {
   for (const [method, route] of authRoutes) {
-    const serverRoute = new RegExp(`app\\.${method.toLowerCase()}\\(['\"]${route}['\"]`);
+    const serverRoute = new RegExp(`app\\.${method.toLowerCase()}\(['\"]${route}['\"]`);
     assert.match(serverApp, serverRoute, `Backend route missing: ${method} ${route}`);
     assert.ok(mobileAuth.includes(`'${route}'`) || mobileAuth.includes(`\"${route}\"`), `Mobile client route missing: ${method} ${route}`);
   }
 });
 
 test('mobile API client sends logout as an authenticated POST', () => {
-  assert.match(mobileAuth, /export function logout\\(token: string\\)/);
-  assert.match(mobileAuth, /request<\\{ message: string \\}>\\('\\/auth\\/logout',\\s*\\{\\s*method: 'POST',\\s*token,/);
+  assert.match(mobileAuth, /export function logout\(token: string\)/);
+  assert.match(mobileAuth, /request<\{ message: string \}>\('\/auth\/logout',\s*\{\s*method: 'POST',\s*token,/);
 });
