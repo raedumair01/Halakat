@@ -7,8 +7,6 @@ const root = path.resolve(__dirname, '../..');
 const mobileAuth = fs.readFileSync(path.join(root, 'services/authApi.ts'), 'utf8');
 const serverApp = fs.readFileSync(path.join(root, 'server/app.js'), 'utf8');
 
-const escapeRegExp = value => value.replace(/[.*+?^${}()|[\\]\\]/g, '\\\\const authRoutes = [');
-
 const authRoutes = [
   ['POST', '/auth/signup/request-otp'],
   ['POST', '/auth/signup'],
@@ -22,13 +20,13 @@ const authRoutes = [
 
 test('mobile auth client and backend expose matching authentication routes', () => {
   for (const [method, route] of authRoutes) {
-    const serverRoute = new RegExp(`app\\.${method.toLowerCase()}\\(['"]${route.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}['"]`);
+    const serverRoute = new RegExp(`app\\.${method.toLowerCase()}\\(['\"]${route}['\"]`);
     assert.match(serverApp, serverRoute, `Backend route missing: ${method} ${route}`);
-    assert.ok(mobileAuth.includes(`'${route}'`) || mobileAuth.includes(`"${route}"`), `Mobile client route missing: ${method} ${route}`);
+    assert.ok(mobileAuth.includes(`'${route}'`) || mobileAuth.includes(`\"${route}\"`), `Mobile client route missing: ${method} ${route}`);
   }
 });
 
 test('mobile API client sends logout as an authenticated POST', () => {
-  assert.match(mobileAuth, /export function logout\(token: string\)/);
-  assert.match(mobileAuth, /request<\{ message: string \}>\('\/auth\/logout',\s*\{\s*method: 'POST',\s*token,/);
+  assert.match(mobileAuth, /export function logout\\(token: string\\)/);
+  assert.match(mobileAuth, /request<\\{ message: string \\}>\\('\\/auth\\/logout',\\s*\\{\\s*method: 'POST',\\s*token,/);
 });
