@@ -20,9 +20,16 @@ const authRoutes = [
 
 test('mobile auth client and backend expose matching authentication routes', () => {
   for (const [method, route] of authRoutes) {
-    const serverRoute = new RegExp(`app\\.${method.toLowerCase()}\(['\"]${route}['\"]`);
-    assert.match(serverApp, serverRoute, `Backend route missing: ${method} ${route}`);
-    assert.ok(mobileAuth.includes(`'${route}'`) || mobileAuth.includes(`\"${route}\"`), `Mobile client route missing: ${method} ${route}`);
+    const routeDeclaration = `app.${method.toLowerCase()}('${route}'`;
+    const alternateQuoteDeclaration = `app.${method.toLowerCase()}(\"${route}\"`;
+    assert.ok(
+      serverApp.includes(routeDeclaration) || serverApp.includes(alternateQuoteDeclaration),
+      `Backend route missing: ${method} ${route}`,
+    );
+    assert.ok(
+      mobileAuth.includes(`'${route}'`) || mobileAuth.includes(`\"${route}\"`),
+      `Mobile client route missing: ${method} ${route}`,
+    );
   }
 });
 
