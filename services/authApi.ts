@@ -104,6 +104,13 @@ export function resetPassword(payload: { email: string; resetToken: string; pass
   });
 }
 
+export function logout(token: string) {
+  return request<{ message: string }>('/auth/logout', {
+    method: 'POST',
+    token,
+  });
+}
+
 export async function getProfile(token: string) {
   const response = await request<{ user: UserProfile }>('/auth/profile', {
     token,
