@@ -7,6 +7,8 @@ const root = path.resolve(__dirname, '../..');
 const mobileAuth = fs.readFileSync(path.join(root, 'services/authApi.ts'), 'utf8');
 const serverApp = fs.readFileSync(path.join(root, 'server/app.js'), 'utf8');
 
+const escapeRegExp = value => value.replace(/[.*+?^${}()|[\\]\\]/g, '\\\\const authRoutes = [');
+
 const authRoutes = [
   ['POST', '/auth/signup/request-otp'],
   ['POST', '/auth/signup'],
