@@ -1,0 +1,42 @@
+name: Deploy backend to Vercel
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vercel-backend-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy backend production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify backend
+        run: |
+          node --check server/app.js
+          npm run test:backend
+          npm run typecheck
+
+      - name: Deploy to Vercel
+        run: npx vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
