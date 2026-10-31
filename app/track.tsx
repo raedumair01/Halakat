@@ -34,6 +34,7 @@ type CalendarDay = {
   isToday: boolean;
   isPlanned: boolean;
   hasActivity: boolean;
+  isCurrentMonth: boolean;
 };
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -50,6 +51,12 @@ function startOfWeek(date: Date) {
   return next;
 }
 
+function startOfMonth(date: Date) {
+  const next = startOfDay(date);
+  next.setDate(1);
+  return next;
+}
+
 function addDays(date: Date, amount: number) {
   const next = new Date(date);
   next.setDate(next.getDate() + amount);
@@ -61,6 +68,10 @@ function formatIsoDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function formatMonthLabel(date: Date) {
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 function getPlanMetrics(plan: MemorizePlan | null): PlanMetrics | null {
@@ -228,6 +239,7 @@ export default function TrackScreen() {
   const router = useRouter();
   const today = useMemo(() => startOfDay(new Date()), []);
   const [selectedDateIso, setSelectedDateIso] = useState(formatIsoDate(today));
+  const [visibleMonth, setVisibleMonth] = useState(startOfMonth(today));
   const [activePlan, setActivePlan] = useState<MemorizePlan | null>(null);
   const [practiceProgress, setPracticeProgress] = useState<PracticeProgress | null>(null);
 
@@ -252,10 +264,11 @@ export default function TrackScreen() {
   const targetVerses = planMetrics ? pagesToVerses(planMetrics.pagesPerDay) : 0;
 
   const days = useMemo<CalendarDay[]>(() => {
-    const weekStart = startOfWeek(today);
+    const monthStart = startOfMonth(visibleMonth);
+    const calendarStart = startOfWeek(monthStart);
 
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = addDays(weekStart, index);
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = addDays(calendarStart, index);
       const iso = formatIsoDate(date);
 
       return {
@@ -265,6 +278,7 @@ export default function TrackScreen() {
         iso,
         isToday: iso === formatIsoDate(today),
         isPlanned: isPlannedStudyDay(date, activePlan, planMetrics),
+        isCurrentMonth: date.getMonth() === monthStart.getMonth(),
         hasActivity: Boolean(
           practiceProgress?.daily[iso]?.recitedVerses ||
           practiceProgress?.daily[iso]?.memorizedVerses ||
@@ -272,13 +286,19 @@ export default function TrackScreen() {
         ),
       };
     });
-  }, [activePlan, planMetrics, practiceProgress, today]);
+  }, [activePlan, planMetrics, practiceProgress, today, visibleMonth]);
 
   useEffect(() => {
     if (!days.some(day => day.iso === selectedDateIso)) {
-      setSelectedDateIso(days[0]?.iso ?? formatIsoDate(today));
+      setSelectedDateIso(formatIsoDate(startOfMonth(visibleMonth)));
     }
-  }, [days, selectedDateIso, today]);
+  }, [days, selectedDateIso, visibleMonth]);
+
+  const changeMonth = (amount: number) => {
+    const nextMonth = startOfMonth(addDays(visibleMonth, amount * 32));
+    setVisibleMonth(nextMonth);
+    setSelectedDateIso(formatIsoDate(nextMonth));
+  };
 
   const selectedDay = days.find(day => day.iso === selectedDateIso) ?? days[0];
   const selectedStats = selectedDay ? practiceProgress?.daily[selectedDay.iso] : undefined;
@@ -363,7 +383,21 @@ export default function TrackScreen() {
           <View style={styles.chartSection}>
             <View style={styles.chartSectionBg} />
 
-            <View style={styles.calendarRow}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(-1)} activeOpacity={0.8}>
+                <Text style={styles.monthArrowText}>‹</Text>
+              </TouchableOpacity>
+              <Text style={styles.monthTitle}>{formatMonthLabel(visibleMonth)}</Text>
+              <TouchableOpacity style={styles.monthArrow} onPress={() => changeMonth(1)} activeOpacity={0.8}>
+                <Text style={styles.monthArrowText}>›</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekdayRow}>
+              {DAY_LABELS.map(label => <Text key={label} style={styles.weekdayLabel}>{label}</Text>)}
+            </View>
+
+            <View style={styles.calendarGrid}>
               {days.map(d => {
                 const isSelected = d.iso === selectedDateIso;
                 return (
@@ -373,12 +407,12 @@ export default function TrackScreen() {
                       styles.dayItem,
                       d.isPlanned && styles.dayItemPlanned,
                       isSelected && styles.dayItemSelected,
+                      !d.isCurrentMonth && styles.dayItemOutsideMonth,
                     ]}
                     onPress={() => setSelectedDateIso(d.iso)}
                     activeOpacity={0.9}
                   >
-                    <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>{d.day}</Text>
-                    <Text style={[styles.dayLabel, isSelected && styles.dayLabelSelected]}>{d.label}</Text>
+                    <Text style={[styles.dayNumber, !d.isCurrentMonth && styles.dayNumberOutsideMonth, isSelected && styles.dayNumberSelected]}>{d.day}</Text>
                     {isSelected ? <View style={styles.dayDot} /> : d.hasActivity ? <View style={styles.dayDotMuted} /> : null}
                   </TouchableOpacity>
                 );
@@ -389,7 +423,7 @@ export default function TrackScreen() {
               <Text style={styles.calendarMetaTitle}>{selectedDay?.isToday ? 'Today' : `${selectedDay?.label} plan`}</Text>
               <Text style={styles.calendarMetaBody}>
                 {activePlan
-                  ? `${selectedDayPlanText}. Recited ${selectedStats?.recitedVerses ?? 0} verses, memorized ${selectedStats?.memorizedVerses ?? 0} verses, and retained ${selectedStats?.retainedVerses ?? 0} verses.`
+                  ? `${selectedDayPlanText}. Recited ${selectedStats?.recitedVerses ?? 0} verses in ${selectedStats?.reciteSessions ?? 0} mic session${selectedStats?.reciteSessions === 1 ? '' : 's'}, memorized ${selectedStats?.memorizedVerses ?? 0} verses in ${selectedStats?.memorizeSessions ?? 0} mic session${selectedStats?.memorizeSessions === 1 ? '' : 's'}, and retained ${selectedStats?.retainedVerses ?? 0} verses.`
                   : 'Start a memorize plan to populate your weekly calendar and targets.'}
               </Text>
             </View>
@@ -542,15 +576,54 @@ const styles = StyleSheet.create({
     height: 260 * SCALE,
     backgroundColor: 'rgba(227, 238, 236, 0.26)',
   },
-  calendarRow: {
-    marginTop: 0,
-    paddingHorizontal: 11 * SCALE,
+  calendarHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: 12 * SCALE,
+    marginBottom: 12 * SCALE,
+  },
+  monthTitle: {
+    fontSize: 17 * SCALE,
+    color: '#0F3A2B',
+    fontFamily: fonts.semiBold,
+  },
+  monthArrow: {
+    width: 34 * SCALE,
+    height: 34 * SCALE,
+    borderRadius: 17 * SCALE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8F3ED',
+  },
+  monthArrowText: {
+    marginTop: -3 * SCALE,
+    fontSize: 28 * SCALE,
+    lineHeight: 32 * SCALE,
+    color: '#0F6A4C',
+    fontFamily: fonts.regular,
+  },
+  weekdayRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingHorizontal: 8 * SCALE,
+    marginBottom: 4 * SCALE,
+  },
+  weekdayLabel: {
+    width: 42 * SCALE,
+    textAlign: 'center',
+    fontSize: 11 * SCALE,
+    color: '#7A8B84',
+    fontFamily: fonts.semiBold,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 8 * SCALE,
   },
   dayItem: {
-    width: 41 * SCALE,
-    height: 66 * SCALE,
+    width: `${100 / 7}%`,
+    height: 52 * SCALE,
     borderRadius: 12 * SCALE,
     alignItems: 'center',
     justifyContent: 'center',
@@ -561,6 +634,9 @@ const styles = StyleSheet.create({
   dayItemSelected: {
     backgroundColor: '#004B40',
   },
+  dayItemOutsideMonth: {
+    opacity: 0.42,
+  },
   dayNumber: {
     fontSize: 18.7451 * SCALE,
     lineHeight: 25 * SCALE,
@@ -569,6 +645,9 @@ const styles = StyleSheet.create({
   },
   dayNumberSelected: {
     color: '#FFFFFF',
+  },
+  dayNumberOutsideMonth: {
+    color: '#98A7A0',
   },
   dayLabel: {
     marginTop: 2 * SCALE,

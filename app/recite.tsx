@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Switch, Image, Alert, ActivityIndicator, Modal, FlatList, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Dimensions, Switch, Image, ActivityIndicator, Modal, FlatList, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import Svg, { Path, Rect, G, Mask, Defs, ClipPath, Circle } from 'react-native-svg';
 import { fonts } from '../constants/fonts';
+import { GEMINI_MODEL } from '../constants/gemini';
+import { getGeminiStatus, transcribeRecitation } from '../services/geminiApi';
+import { showHalakatDialog } from '../services/dialogService';
 import { fetchSurahArabic, fetchSurahList } from '../services/quranApi';
-import { recordRecitationProgress } from '../services/practiceProgress';
+import { recordMemorizationProgress, recordRecitationProgress, recordRetentionProgress } from '../services/practiceProgress';
 import {
   useAudioRecorder,
   useAudioRecorderState,
@@ -62,12 +65,6 @@ const extractSurahList = (payload: SurahListResponse | SurahListItem[]): SurahLi
   return [];
 };
 
-const GROQ_TRANSCRIBE_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
-const GROQ_TRANSCRIBE_MODEL = 'whisper-large-v3-turbo';
-const GROQ_VOICE_API_KEY =
-  process.env.EXPO_PUBLIC_GROQ_VOICE_API_KEY ??
-  process.env.EXPO_PUBLIC_GROQ_API_KEY ??
-  '';
 const MIN_VALID_DURATION = 1.0;
 const NOTHING_THRESHOLD = 0.5;
 const AYAH_MATCH_THRESHOLD = 0.62;
@@ -179,42 +176,6 @@ const calculateAyahMatchScore = (expected: string, actual: string) => {
   const editSimilarity = 1 - levenshteinDistance(expected, actual) / maxLen;
   const overlap = tokenOverlapScore(expected, actual);
   return Math.max(0, Math.min(1, 0.65 * editSimilarity + 0.35 * overlap));
-};
-
-const transcribeWithGroq = async (uri: string): Promise<string> => {
-  if (!GROQ_VOICE_API_KEY) {
-    throw new Error('Recitation AI is not configured yet. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY to your .env file.');
-  }
-
-  const fileName = uri.split('/').pop() || 'recitation.m4a';
-  const extension = fileName.split('.').pop()?.toLowerCase() || 'm4a';
-  const mimeType = extension === 'wav' ? 'audio/wav' : 'audio/m4a';
-
-  const body = new FormData();
-  body.append('model', GROQ_TRANSCRIBE_MODEL);
-  body.append('language', 'ar');
-  body.append('response_format', 'json');
-  body.append('file', {
-    uri,
-    name: fileName,
-    type: mimeType,
-  } as any);
-
-  const response = await fetch(GROQ_TRANSCRIBE_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${GROQ_VOICE_API_KEY}`,
-    },
-    body,
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Transcription failed (${response.status}): ${errorBody}`);
-  }
-
-  const data = await response.json() as { text?: string };
-  return (data.text || '').trim();
 };
 
 function MenuIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: string }) {
@@ -381,7 +342,9 @@ function MicrophoneIllustration() {
 
 export default function ReciteScreen() {
   const router = useRouter();
-  const aiConfigured = !!GROQ_VOICE_API_KEY;
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const activityMode = params.mode === 'memorize' ? 'memorize' : params.mode === 'retain' ? 'retain' : 'recite';
+  const [aiConfigured, setAiConfigured] = useState(false);
   const [showVerses, setShowVerses] = useState(true);
   const [recordEnabled, setRecordEnabled] = useState(false);
   const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
@@ -400,6 +363,10 @@ export default function ReciteScreen() {
   const ayahCount = surahAyahs.length;
   const currentAyahText = surahAyahs[currentAyahIndex]?.text ?? '';
   const isSurahFinished = ayahCount > 0 && completedVerses.size === ayahCount;
+
+  useEffect(() => {
+    getGeminiStatus().then(status => setAiConfigured(status.configured)).catch(() => setAiConfigured(false));
+  }, []);
   const goToNextAyah = () => {
     if (ayahCount === 0) return;
     setCurrentAyahIndex((prev) => (prev + 1) % ayahCount);
@@ -461,7 +428,7 @@ export default function ReciteScreen() {
       }
 
       setIsMicPermissionDenied(true);
-      Alert.alert(
+      showHalakatDialog(
         'Microphone access needed',
         'Please allow microphone access in Settings to continue recording recitation.',
         [
@@ -509,7 +476,7 @@ export default function ReciteScreen() {
         return { isValid: false, reason: 'wrong' };
       }
 
-      const transcript = await transcribeWithGroq(uri);
+      const transcript = await transcribeRecitation(uri);
       const normalizedTranscript = normalizeArabicText(transcript);
       const normalizedExpectedAyah = normalizeArabicText(expectedAyahText);
       const score = calculateAyahMatchScore(normalizedExpectedAyah, normalizedTranscript);
@@ -529,8 +496,8 @@ export default function ReciteScreen() {
       return { isValid: false, reason: 'wrong', transcript, score };
     } catch (error) {
       console.warn('[ReciteScreen] Error analyzing recording:', error);
-      if (error instanceof Error && error.message.includes('EXPO_PUBLIC_GROQ_VOICE_API_KEY')) {
-        setStatusMessage('Recitation AI is not configured. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY in .env and restart Expo.');
+      if (error instanceof Error && error.message.includes('AI')) {
+        setStatusMessage('Recitation AI is unavailable. Check the Halakat AI server and reload Expo.');
       }
       return { isValid: false, reason: 'wrong' };
     }
@@ -539,10 +506,10 @@ export default function ReciteScreen() {
   const handleRecordToggle = async (value: boolean) => {
     if (value) {
       if (!aiConfigured) {
-        setStatusMessage('Recitation AI is not configured. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY in .env and restart Expo.');
-        Alert.alert(
+        setStatusMessage('Recitation AI is unavailable. Check the Halakat AI server and reload Expo.');
+        showHalakatDialog(
           'AI not configured',
-          'Add EXPO_PUBLIC_GROQ_VOICE_API_KEY to your .env file and restart Expo to enable recitation analysis.'
+          'Start the Halakat AI server and reload Expo to enable recitation analysis.'
         );
         return;
       }
@@ -569,7 +536,7 @@ export default function ReciteScreen() {
       const permission = await requestRecordingPermissionsAsync();
       if (permission.status !== 'granted') {
         setIsMicPermissionDenied(true);
-        Alert.alert(
+        showHalakatDialog(
           'Permission required',
           'Microphone access is needed to start reciting.',
           [
@@ -595,7 +562,7 @@ export default function ReciteScreen() {
       return true;
     } catch (error) {
       console.warn('Failed to start recording', error);
-      Alert.alert('Recording error', 'Unable to start recording. Please try again.');
+      showHalakatDialog('Recording error', 'Unable to start recording. Please try again.');
       return false;
     }
   };
@@ -638,8 +605,13 @@ export default function ReciteScreen() {
           const allVersesCompleted = newSet.size === ayahCount;
 
           if (!wasAlreadyCompleted) {
-            void recordRecitationProgress(1).catch(error => {
-              console.warn('[ReciteScreen] Failed to persist recitation progress', error);
+            const recordProgress = activityMode === 'memorize'
+              ? recordMemorizationProgress
+              : activityMode === 'retain'
+                ? recordRetentionProgress
+                : recordRecitationProgress;
+            void recordProgress(1).catch(error => {
+              console.warn('[ReciteScreen] Failed to persist microphone progress', error);
             });
           }
           
@@ -711,7 +683,7 @@ export default function ReciteScreen() {
             <Text style={styles.greeting}>Asslamualaikum</Text>
             <View style={styles.sectionHeadingRow}>
               <View style={styles.sectionBullet} />
-              <Text style={styles.sectionTitle}>Recite Quran</Text>
+              <Text style={styles.sectionTitle}>{activityMode === 'retain' ? 'Retain Quran' : activityMode === 'memorize' ? 'Memorize Quran' : 'Recite Quran'}</Text>
             </View>
           </View>
 
@@ -775,8 +747,8 @@ export default function ReciteScreen() {
           <View style={[styles.aiStatusBanner, aiConfigured ? styles.aiStatusBannerReady : styles.aiStatusBannerMissing]}>
             <Text style={[styles.aiStatusText, aiConfigured ? styles.aiStatusTextReady : styles.aiStatusTextMissing]}>
               {aiConfigured
-                ? `Recitation AI ready: ${GROQ_TRANSCRIBE_MODEL}`
-                : 'Recitation AI not configured. Add EXPO_PUBLIC_GROQ_VOICE_API_KEY in .env and restart Expo.'}
+                ? `Recitation AI ready: ${GEMINI_MODEL}`
+                : 'Recitation AI unavailable. Start the Halakat AI server and reload Expo.'}
             </Text>
           </View>
           {isSurahLoading && (
@@ -799,7 +771,9 @@ export default function ReciteScreen() {
               <Text style={styles.ayahTitle}>
                 {surahData?.name || '...'} <Text style={styles.ayahCaret}>∨</Text>
               </Text>
-              <Text style={styles.ayahText}>{currentAyahText || 'No ayah loaded.'}</Text>
+              <View style={styles.ayahCard}>
+                <Text style={styles.ayahText}>{currentAyahText || 'No ayah loaded.'}</Text>
+              </View>
               {/* Progress indicator */}
               <View style={styles.progressContainer}>
                 <Text style={styles.progressText}>
@@ -1134,6 +1108,23 @@ const styles = StyleSheet.create({
   ayahContainer: {
     alignItems: 'center',
     marginBottom: 28 * SCALE,
+    width: '100%',
+  },
+  ayahCard: {
+    width: '100%',
+    minHeight: 150 * SCALE,
+    paddingHorizontal: 18 * SCALE,
+    paddingVertical: 18 * SCALE,
+    borderRadius: 20 * SCALE,
+    borderWidth: 1,
+    borderColor: '#D7E8DF',
+    backgroundColor: '#F7FBF8',
+    justifyContent: 'center',
+    shadowColor: '#0B4132',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   ayahTitle: {
     fontSize: 28 * SCALE,
@@ -1147,10 +1138,14 @@ const styles = StyleSheet.create({
     marginLeft: 6 * SCALE,
   },
   ayahText: {
-    fontSize: 22 * SCALE,
-    lineHeight: 34 * SCALE,
+    width: '100%',
+    fontSize: 24 * SCALE,
+    lineHeight: 52 * SCALE,
     color: '#0B0E17',
     fontFamily: fonts.arabicQuran,
+    textAlign: 'center',
+    writingDirection: 'rtl',
+    includeFontPadding: true,
   },
   micWrapper: {
     alignItems: 'center',

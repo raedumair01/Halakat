@@ -251,7 +251,10 @@ export default function MemorizeScreen() {
           </View>
 
           {/* Read Quran Card */}
-          <TouchableOpacity style={styles.readQuranCard} onPress={() => router.push('/recite')}>
+          <TouchableOpacity
+            style={styles.readQuranCard}
+            onPress={() => router.push({ pathname: '/recite', params: { mode: 'memorize' } })}
+          >
             <LinearGradient
               colors={['#6F9A84', '#BDCCC1']}
               style={styles.readQuranGradient}

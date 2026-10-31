@@ -1,10 +1,11 @@
 import React from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { fonts } from '../constants/fonts';
 import { setActiveMemorizePlan, type ExistingPlanId } from '../services/memorizePlanSession';
+import { showHalakatDialog } from '../services/dialogService';
 import { recordRetentionProgress } from '../services/practiceProgress';
 
 const EXISTING_PLANS = [
@@ -136,7 +137,7 @@ export default function MemorizeExistingScreen() {
                         await recordRetentionProgress(pagesToVerses(EXISTING_PLAN_PAGES_PER_DAY[plan.id as ExistingPlanId]));
                         router.push('/track');
                       } catch (error) {
-                        Alert.alert('Unable to start plan', error instanceof Error ? error.message : 'Please try again.');
+                        showHalakatDialog('Unable to start plan', error instanceof Error ? error.message : 'Please try again.');
                       }
                     }}
                   >

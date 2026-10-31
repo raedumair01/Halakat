@@ -4,15 +4,9 @@
     "slug": "halakat",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/final.png",
-    "splash": {
-      "image": "./assets/images/splash.png",
-      "resizeMode": "cover",
-      "backgroundColor": "#18392b"
-    },
+    "icon": "./assets/images/final-square.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.raedumair02.halakat"
@@ -27,6 +21,14 @@
       "expo-font",
       "expo-web-browser",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/final-square.png",
+          "backgroundColor": "#18392b",
+          "imageWidth": 200
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Allow Halakat to access your location to show accurate prayer times."
@@ -40,7 +42,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/appicon.png",
+        "foregroundImage": "./assets/images/final-square.png",
         "backgroundColor": "#18392b"
       },
       "permissions": [

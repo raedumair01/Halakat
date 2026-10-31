@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Platform } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { fonts } from '../constants/fonts';
 import { useAuth } from '../providers/AuthProvider';
 import { requestSignupOtp } from '../services/authApi';
+import { showHalakatDialog } from '../services/dialogService';
 
 type AuthMode = 'login' | 'register';
 
@@ -109,7 +110,7 @@ export default function AuthScreen() {
     if (response.otp) {
       setSignupOtp(response.otp);
     }
-    Alert.alert('Check your email', response.message);
+    showHalakatDialog('Check your email', response.message);
   };
 
   const handleContinue = async () => {
@@ -138,7 +139,7 @@ export default function AuthScreen() {
       router.replace('/(tabs)/home');
     } catch (error) {
       console.error('Authentication failed:', error);
-      Alert.alert(isRegister ? 'Sign up failed' : 'Login failed', error instanceof Error ? error.message : 'Please try again.');
+      showHalakatDialog(isRegister ? 'Sign up failed' : 'Login failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -343,7 +344,7 @@ export default function AuthScreen() {
                   setSubmitting(true);
                   await handleRequestSignupOtp();
                 } catch (error) {
-                  Alert.alert('Code failed', error instanceof Error ? error.message : 'Please try again.');
+                  showHalakatDialog('Code failed', error instanceof Error ? error.message : 'Please try again.');
                 } finally {
                   setSubmitting(false);
                 }

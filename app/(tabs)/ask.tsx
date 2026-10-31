@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,14 +12,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '../../constants/fonts';
-import { GROQ_CHAT_API_KEY, GROQ_MODEL } from '../../constants/chatbot';
+import { GEMINI_MODEL } from '../../constants/gemini';
 import { ChatMessage, sendChatRequest } from '../../services/chatbotApi';
+import { getGeminiStatus } from '../../services/geminiApi';
 
 export default function AskScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
-  const aiConfigured = !!GROQ_CHAT_API_KEY;
+  const [aiConfigured, setAiConfigured] = useState(false);
+
+  useEffect(() => {
+    getGeminiStatus().then(status => setAiConfigured(status.configured)).catch(() => setAiConfigured(false));
+  }, []);
 
   const handleSend = async () => {
     const trimmed = input.trim();
@@ -60,7 +65,7 @@ export default function AskScreen() {
           <View style={styles.statusRow}>
             <View style={[styles.statusBadge, aiConfigured ? styles.statusBadgeReady : styles.statusBadgeMissing]}>
               <Text style={[styles.statusBadgeText, aiConfigured ? styles.statusBadgeTextReady : styles.statusBadgeTextMissing]}>
-                {aiConfigured ? `Model: ${GROQ_MODEL}` : 'AI not configured'}
+                {aiConfigured ? `Model: ${GEMINI_MODEL}` : 'AI not configured'}
               </Text>
             </View>
           </View>
@@ -77,7 +82,7 @@ export default function AskScreen() {
               <Text style={styles.emptyText}>
                 {aiConfigured
                   ? 'Type your question below to start a conversation with the assistant.'
-                  : 'Add your Groq API key in .env, restart Expo, and the model will appear here.'}
+                  : 'Start the Halakat AI server and reload Expo to connect the model.'}
               </Text>
             </View>
           )}

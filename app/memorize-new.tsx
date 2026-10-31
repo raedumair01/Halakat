@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { fonts } from '../constants/fonts';
 import { setActiveMemorizePlan } from '../services/memorizePlanSession';
+import { showHalakatDialog } from '../services/dialogService';
 import { recordMemorizationProgress } from '../services/practiceProgress';
 
 const LEVELS = ['1-5', '5-10', '10-15', '15-20', '20-25', '25-30', '30-35', '35-40', '40-45', '45-50', '50-55', '+55'];
@@ -147,7 +148,7 @@ export default function MemorizeNewScreen() {
               await recordMemorizationProgress(pagesToVerses(pagesPerDay));
               router.push('/track');
             } catch (error) {
-              Alert.alert('Unable to start plan', error instanceof Error ? error.message : 'Please try again.');
+              showHalakatDialog('Unable to start plan', error instanceof Error ? error.message : 'Please try again.');
             }
           }}
         >

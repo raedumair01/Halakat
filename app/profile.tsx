@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowLeft, LogOut, Save } from 'lucide-react-native';
 import { fonts } from '../constants/fonts';
 import { useAuth } from '../providers/AuthProvider';
+import { showHalakatDialog } from '../services/dialogService';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -64,11 +64,11 @@ export default function ProfileScreen() {
       setBio(nextBio);
       setLocation(nextLocation);
       setStreakGoal(String(nextStreak));
-      Alert.alert('Profile updated', 'Your Halakat profile has been saved.', [
+      showHalakatDialog('Profile updated', 'Your Halakat profile has been saved.', [
         { text: 'OK', onPress: () => router.back() },
       ]);
     } catch (error) {
-      Alert.alert('Update failed', error instanceof Error ? error.message : 'Please try again.');
+      showHalakatDialog('Update failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setSaving(false);
     }

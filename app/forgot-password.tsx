@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react-native';
 import { fonts } from '../constants/fonts';
 import { requestPasswordReset, resetPassword } from '../services/authApi';
+import { showHalakatDialog } from '../services/dialogService';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -57,9 +58,9 @@ export default function ForgotPasswordScreen() {
       if (response.resetToken) {
         setResetToken(response.resetToken);
       }
-      Alert.alert('Reset code generated', response.message);
+      showHalakatDialog('Reset code generated', response.message);
     } catch (error) {
-      Alert.alert('Reset failed', error instanceof Error ? error.message : 'Please try again.');
+      showHalakatDialog('Reset failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -109,14 +110,14 @@ export default function ForgotPasswordScreen() {
         resetToken: resetToken.trim(),
         password,
       });
-      Alert.alert('Password reset', response.message, [
+      showHalakatDialog('Password reset', response.message, [
         {
           text: 'Sign in',
           onPress: () => router.replace('/auth'),
         },
       ]);
     } catch (error) {
-      Alert.alert('Reset failed', error instanceof Error ? error.message : 'Please try again.');
+      showHalakatDialog('Reset failed', error instanceof Error ? error.message : 'Please try again.');
     } finally {
       setSubmitting(false);
     }

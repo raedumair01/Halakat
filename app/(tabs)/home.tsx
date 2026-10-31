@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image as RNImage } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image as RNImage, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -46,6 +46,8 @@ function MenuIcon({ size = 24, color = '#8789A3' }: { size?: number; color?: str
 export default function HomeTab() {
   const router = useRouter();
   const { refreshProfile, user } = useAuth();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 370;
   const displayName = user?.fullName?.trim() || 'Friend';
   const profileInitial = displayName.charAt(0).toUpperCase();
 
@@ -80,17 +82,17 @@ export default function HomeTab() {
               <View style={styles.heroText}>
                 <Text style={styles.heroEyebrow}>Community Circle</Text>
                 <Text style={styles.heroArabic}>انضم لحلقة</Text>
-                <Text style={styles.heroSubtext}>
+                <Text style={styles.heroSubtext} numberOfLines={isCompact ? 3 : 4}>
                   Build your profile, stay accountable, and grow with your Halakat community.
                 </Text>
-                <TouchableOpacity style={styles.heroCta} onPress={() => router.push('/profile')}>
-                  <Text style={styles.heroCtaText}>Open Profile</Text>
+                <TouchableOpacity style={[styles.heroCta, isCompact && styles.heroCtaCompact]} onPress={() => router.push('/circles')}>
+                  <Text style={styles.heroCtaText} numberOfLines={1}>Explore Circles</Text>
                   <View style={styles.heroCtaIcon}>
                     <HeroArrowIcon />
                   </View>
                 </TouchableOpacity>
               </View>
-              <View style={styles.heroIllustration}>
+              <View style={[styles.heroIllustration, isCompact && styles.heroIllustrationCompact]}>
                 <HeroIllustration />
               </View>
             </View>
@@ -104,13 +106,13 @@ export default function HomeTab() {
 
           <View style={styles.communityCard}>
             <View style={styles.communityCopy}>
-              <Text style={styles.communityTitle}>Your profile</Text>
-              <Text style={styles.communityText}>
-                {user?.bio || 'Add a short bio and personalize your Halakat journey.'}
+              <Text style={styles.communityTitle}>Halakat community</Text>
+              <Text style={styles.communityText} numberOfLines={2}>
+                Find a circle near you or create one for your Quran routine.
               </Text>
             </View>
-            <TouchableOpacity style={styles.communityButton} onPress={() => router.push('/profile')}>
-              <Text style={styles.communityButtonText}>Edit</Text>
+            <TouchableOpacity style={styles.communityButton} onPress={() => router.push('/circles')}>
+              <Text style={styles.communityButtonText} numberOfLines={1}>Explore</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -134,7 +136,7 @@ function FeatureCard({ title, colors, Illustration }: FeatureCardProps) {
     }
 
     if (title === 'Retain') {
-      router.push('/memorize-existing');
+      router.push('/recite?mode=retain');
       return;
     }
 
@@ -171,8 +173,8 @@ function HeroIllustration() {
 
 function HeroBackground() {
   return (
-    <View style={StyleSheet.absoluteFillObject}>
-      <Svg width="100%" height="100%" viewBox="0 0 373 189" style={StyleSheet.absoluteFillObject}>
+    <View style={StyleSheet.absoluteFill}>
+      <Svg width="100%" height="100%" viewBox="0 0 373 189" style={StyleSheet.absoluteFill}>
         <Defs>
           <ClipPath id="heroClip">
             <Rect width="373" height="189" rx="32" />
@@ -385,7 +387,7 @@ const styles = StyleSheet.create({
   heroContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   heroText: {
     flex: 1,
@@ -405,6 +407,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.arabicQuran,
   },
   heroSubtext: {
+    flexShrink: 1,
     color: '#E8FFF0',
     fontSize: 14,
     lineHeight: 22,
@@ -413,11 +416,11 @@ const styles = StyleSheet.create({
   heroCta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
-    paddingVertical: 5,
-    paddingHorizontal: 18,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
     alignSelf: 'flex-start',
     shadowColor: '#164A37',
     shadowOpacity: 0.2,
@@ -427,13 +430,14 @@ const styles = StyleSheet.create({
   },
   heroCtaText: {
     color: '#0F3A2B',
-    fontSize: 16,
+    fontSize: 13,
+    flexShrink: 1,
     fontFamily: fonts.semiBold,
   },
   heroCtaIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#DCEEDF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -450,6 +454,10 @@ const styles = StyleSheet.create({
     height: 130,
     borderRadius: 65,
     marginRight: -25,
+  },
+  heroIllustrationCompact: {
+    width: 105,
+    height: 125,
   },
   featuresGrid: {
     flexDirection: 'row',
@@ -501,15 +509,22 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#667085',
     fontFamily: fonts.regular,
+    flexShrink: 1,
   },
   communityButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 16,
+    minWidth: 76,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
     backgroundColor: '#0F6A53',
   },
   communityButtonText: {
     color: '#FFFFFF',
     fontFamily: fonts.semiBold,
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  heroCtaCompact: {
+    paddingHorizontal: 10,
   },
 });

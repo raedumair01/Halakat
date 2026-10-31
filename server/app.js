@@ -17,9 +17,11 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY?.trim();
 const AUTH_EMAIL_FROM = process.env.PASSWORD_RESET_FROM_EMAIL?.trim();
 const GMAIL_USER = process.env.GMAIL_USER?.trim();
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD?.trim();
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
 
 function formatLocalIsoDate(date) {
   const year = date.getFullYear();
@@ -143,6 +145,60 @@ const userSchema = new mongoose.Schema(
 );
 
 const User = mongoose.models.User || mongoose.model('User', userSchema);
+
+const circleSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    description: { type: String, default: '', trim: true },
+    creatorName: { type: String, required: true, trim: true },
+    level: { type: String, default: 'All levels', trim: true },
+    pagesPerDay: { type: Number, default: 1, min: 0.25 },
+    minutesPerDay: { type: Number, default: 30, min: 5 },
+    maxMembers: { type: Number, default: 50, min: 2 },
+    memberIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    location: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: undefined },
+      label: { type: String, default: 'Online circle' },
+    },
+    isPremium: { type: Boolean, default: false },
+  },
+  { timestamps: true }
+);
+circleSchema.index({ location: '2dsphere' });
+const Circle = mongoose.models.Circle || mongoose.model('Circle', circleSchema);
+
+const DEFAULT_CIRCLES = [
+  { name: 'Quran Savers', creatorName: 'Halakat Community', description: 'A steady circle for building a daily Quran habit.', level: 'All levels', pagesPerDay: 1, minutesPerDay: 20, maxMembers: 50, location: { type: 'Point', coordinates: [67.0011, 24.8607], label: 'Karachi' } },
+  { name: 'Yusr Team', creatorName: 'Ahmed Ben Alae', description: 'Supportive memorization with a calm, consistent pace.', level: 'Beginner', pagesPerDay: 2, minutesPerDay: 60, maxMembers: 85, location: { type: 'Point', coordinates: [73.0479, 33.6844], label: 'Islamabad' } },
+  { name: 'Hafidon', creatorName: 'Amine Ben Yahya', description: 'Accountability for learners strengthening their hifz.', level: 'Intermediate', pagesPerDay: 1, minutesPerDay: 30, maxMembers: 40, location: { type: 'Point', coordinates: [55.2708, 25.2048], label: 'Dubai' } },
+  { name: 'Unique Guys', creatorName: 'Salman Oman', description: 'A welcoming circle for recitation and retention.', level: 'All levels', pagesPerDay: 0.5, minutesPerDay: 20, maxMembers: 30, location: { type: 'Point', coordinates: [58.4059, 23.5880], label: 'Muscat' } },
+];
+
+function formatCircle(circle, userId) {
+  const members = Array.isArray(circle.memberIds) ? circle.memberIds : [];
+  return {
+    id: String(circle._id),
+    name: circle.name,
+    description: circle.description,
+    creatorName: circle.creatorName,
+    level: circle.level,
+    pagesPerDay: circle.pagesPerDay,
+    minutesPerDay: circle.minutesPerDay,
+    maxMembers: circle.maxMembers,
+    memberCount: members.length,
+    isMember: Boolean(userId && members.some(member => String(member) === String(userId))),
+    isPremium: Boolean(circle.isPremium),
+    locationLabel: circle.location?.label || 'Online circle',
+    coordinates: circle.location?.coordinates || null,
+    createdAt: circle.createdAt,
+  };
+}
+
+async function ensureDefaultCircles() {
+  if (await Circle.countDocuments()) return;
+  await Circle.insertMany(DEFAULT_CIRCLES);
+}
 
 // Each login creates a distinct server-side session. Revocation is checked on
 // every authenticated request, so logout/password reset takes effect immediately.
@@ -753,6 +809,243 @@ app.post('/progress/activity', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Progress update failed:', error);
     return res.status(500).json({ message: 'Unable to update progress right now.' });
+  }
+});
+
+function circleDistanceKm(latitude1, longitude1, latitude2, longitude2) {
+  const earthRadiusKm = 6371;
+  const toRadians = value => (value * Math.PI) / 180;
+  const deltaLatitude = toRadians(latitude2 - latitude1);
+  const deltaLongitude = toRadians(longitude2 - longitude1);
+  const a = Math.sin(deltaLatitude / 2) ** 2
+    + Math.cos(toRadians(latitude1)) * Math.cos(toRadians(latitude2)) * Math.sin(deltaLongitude / 2) ** 2;
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function getAllCircles() {
+  await ensureDefaultCircles();
+  return Circle.find().sort({ createdAt: -1 }).lean();
+}
+
+app.get('/circles', authMiddleware, async (req, res) => {
+  try {
+    const circles = await getAllCircles();
+    return res.json({ circles: circles.map(circle => formatCircle(circle, req.user._id)) });
+  } catch (error) {
+    console.error('Circle listing failed:', error);
+    return res.status(500).json({ message: 'Unable to load circles right now.' });
+  }
+});
+
+app.get('/circles/top', authMiddleware, async (req, res) => {
+  try {
+    await ensureDefaultCircles();
+    const circles = await Circle.find().sort({ memberIds: -1, createdAt: -1 }).limit(12).lean();
+    return res.json({ circles: circles.map(circle => formatCircle(circle, req.user._id)) });
+  } catch (error) {
+    console.error('Top circles failed:', error);
+    return res.status(500).json({ message: 'Unable to load top circles right now.' });
+  }
+});
+
+app.get('/circles/mine', authMiddleware, async (req, res) => {
+  try {
+    const circles = await Circle.find({ memberIds: req.user._id }).sort({ updatedAt: -1 }).lean();
+    return res.json({ circles: circles.map(circle => formatCircle(circle, req.user._id)) });
+  } catch (error) {
+    console.error('My circles failed:', error);
+    return res.status(500).json({ message: 'Unable to load your circles right now.' });
+  }
+});
+
+app.get('/circles/nearby', authMiddleware, async (req, res) => {
+  try {
+    const latitude = Number(req.query.latitude);
+    const longitude = Number(req.query.longitude);
+    const radiusKm = Math.min(500, Math.max(1, Number(req.query.radiusKm) || 50));
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return res.status(400).json({ message: 'A valid latitude and longitude are required.' });
+    }
+
+    const circles = await getAllCircles();
+    const nearby = circles
+      .map(circle => {
+        const [circleLongitude, circleLatitude] = circle.location?.coordinates || [];
+        if (!Number.isFinite(circleLatitude) || !Number.isFinite(circleLongitude)) return null;
+        const distanceKm = circleDistanceKm(latitude, longitude, circleLatitude, circleLongitude);
+        return distanceKm <= radiusKm ? { ...formatCircle(circle, req.user._id), distanceKm: Math.round(distanceKm * 10) / 10 } : null;
+      })
+      .filter(Boolean)
+      .sort((first, second) => first.distanceKm - second.distanceKm);
+
+    return res.json({ circles: nearby });
+  } catch (error) {
+    console.error('Nearby circles failed:', error);
+    return res.status(500).json({ message: 'Unable to find nearby circles right now.' });
+  }
+});
+
+app.get('/circles/matches', authMiddleware, async (req, res) => {
+  try {
+    const level = typeof req.query.level === 'string' ? req.query.level : '';
+    const pagesPerDay = Number(req.query.pagesPerDay);
+    const minutesPerDay = Number(req.query.minutesPerDay);
+    const circles = await getAllCircles();
+    const ranked = circles.map(circle => {
+      const levelScore = level && circle.level !== 'All levels' && circle.level !== level ? 3 : 0;
+      const pageScore = Number.isFinite(pagesPerDay) ? Math.abs(circle.pagesPerDay - pagesPerDay) : 0;
+      const timeScore = Number.isFinite(minutesPerDay) ? Math.abs(circle.minutesPerDay - minutesPerDay) / 30 : 0;
+      return { circle, matchScore: levelScore + pageScore + timeScore };
+    }).sort((first, second) => first.matchScore - second.matchScore).slice(0, 12);
+
+    return res.json({ circles: ranked.map(({ circle, matchScore }) => ({ ...formatCircle(circle, req.user._id), matchScore: Math.round(matchScore * 100) / 100 })) });
+  } catch (error) {
+    console.error('Circle matching failed:', error);
+    return res.status(500).json({ message: 'Unable to find matching circles right now.' });
+  }
+});
+
+app.post('/circles', authMiddleware, async (req, res) => {
+  try {
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim().slice(0, 60) : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim().slice(0, 240) : '';
+    const level = typeof req.body?.level === 'string' ? req.body.level.trim().slice(0, 30) : 'All levels';
+    const pagesPerDay = Number(req.body?.pagesPerDay);
+    const minutesPerDay = Number(req.body?.minutesPerDay);
+    const maxMembers = Number(req.body?.maxMembers);
+    const latitude = Number(req.body?.latitude);
+    const longitude = Number(req.body?.longitude);
+    const locationLabel = typeof req.body?.locationLabel === 'string' ? req.body.locationLabel.trim().slice(0, 80) : 'Online circle';
+
+    if (!name) return res.status(400).json({ message: 'Circle name is required.' });
+    if (!Number.isFinite(pagesPerDay) || pagesPerDay <= 0 || !Number.isFinite(minutesPerDay) || minutesPerDay < 5) {
+      return res.status(400).json({ message: 'Choose a valid daily target.' });
+    }
+    const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+    const circle = await Circle.create({
+      name, description, creatorName: req.user.fullName, level,
+      pagesPerDay: Math.min(20, pagesPerDay), minutesPerDay: Math.min(240, Math.round(minutesPerDay)),
+      maxMembers: Number.isFinite(maxMembers) ? Math.min(500, Math.max(2, Math.round(maxMembers))) : 50,
+      memberIds: [req.user._id],
+      location: { type: 'Point', coordinates: hasCoordinates ? [longitude, latitude] : undefined, label: locationLabel },
+    });
+    req.user.circlesJoined = (req.user.circlesJoined ?? 0) + 1;
+    await req.user.save();
+    return res.status(201).json({ circle: formatCircle(circle, req.user._id) });
+  } catch (error) {
+    console.error('Circle creation failed:', error);
+    return res.status(500).json({ message: 'Unable to create this circle right now.' });
+  }
+});
+
+app.post('/circles/:id/join', authMiddleware, async (req, res) => {
+  try {
+    const circle = await Circle.findById(req.params.id);
+    if (!circle) return res.status(404).json({ message: 'Circle not found.' });
+    const userId = String(req.user._id);
+    const isMember = circle.memberIds.some(member => String(member) === userId);
+    if (!isMember && circle.memberIds.length >= circle.maxMembers) return res.status(409).json({ message: 'This circle is full.' });
+    if (!isMember) {
+      circle.memberIds.push(req.user._id);
+      await circle.save();
+      req.user.circlesJoined = (req.user.circlesJoined ?? 0) + 1;
+      await req.user.save();
+    }
+    return res.json({ circle: formatCircle(circle, req.user._id) });
+  } catch (error) {
+    console.error('Circle join failed:', error);
+    return res.status(500).json({ message: 'Unable to join this circle right now.' });
+  }
+});
+
+const GEMINI_SYSTEM_PROMPT =
+  'You are a helpful assistant for the Halakat app. ' +
+  'Answer user questions clearly and concisely. ' +
+  'When answering religious questions, prefer well-known, mainstream opinions and avoid giving personal fatwas. ' +
+  'If you are not sure about an Islamic ruling, say you are not certain and advise the user to consult a qualified scholar.';
+
+async function callGemini(contents, generationConfig = {}) {
+  if (!GEMINI_API_KEY) {
+    const error = new Error('Gemini is not configured on the server.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: GEMINI_SYSTEM_PROMPT }] },
+        contents,
+        generationConfig,
+      }),
+    }
+  );
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(data?.error?.message || 'Gemini request failed.');
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return data?.candidates?.[0]?.content?.parts
+    ?.map(part => part.text || '')
+    .join('')
+    .trim() || '';
+}
+
+app.get('/ai/status', (_req, res) => {
+  return res.json({ configured: Boolean(GEMINI_API_KEY), model: GEMINI_MODEL, provider: 'Gemini' });
+});
+
+app.post('/ai/chat', async (req, res) => {
+  try {
+    const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+    const contents = messages
+      .filter(message => message && typeof message.content === 'string')
+      .map(message => ({
+        role: message.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: message.content.slice(0, 8000) }],
+      }));
+
+    if (!contents.length) {
+      return res.status(400).json({ message: 'At least one message is required.' });
+    }
+
+    const text = await callGemini(contents, { temperature: 0.4, maxOutputTokens: 512 });
+    return res.json({ text });
+  } catch (error) {
+    console.error('Gemini chat failed:', error);
+    return res.status(error.statusCode || 500).json({ message: error.message || 'Gemini chat failed.' });
+  }
+});
+
+app.post('/ai/transcribe', async (req, res) => {
+  try {
+    const audioBase64 = typeof req.body?.audioBase64 === 'string' ? req.body.audioBase64 : '';
+    const mimeType = typeof req.body?.mimeType === 'string' ? req.body.mimeType : 'audio/mp4';
+
+    if (!audioBase64) {
+      return res.status(400).json({ message: 'Audio data is required.' });
+    }
+
+    const text = await callGemini([
+      {
+        role: 'user',
+        parts: [
+          { inlineData: { mimeType, data: audioBase64 } },
+          { text: 'Transcribe this Quran recitation in Arabic only. Return only the Arabic words that were recited, with no commentary.' },
+        ],
+      },
+    ], { temperature: 0, maxOutputTokens: 1024 });
+
+    return res.json({ text });
+  } catch (error) {
+    console.error('Gemini transcription failed:', error);
+    return res.status(error.statusCode || 500).json({ message: error.message || 'Gemini transcription failed.' });
   }
 });
 
