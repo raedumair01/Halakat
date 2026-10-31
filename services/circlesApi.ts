@@ -20,6 +20,19 @@ export type Circle = {
   createdAt?: string;
 };
 
+export type NearbyPlace = {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  mapsUrl: string | null;
+  type: string;
+  rating: number | null;
+  ratingCount: number;
+  source: string;
+};
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const session = await getActiveSession();
   if (!session?.token) throw new Error('Please sign in to use Halakat circles.');
@@ -57,6 +70,10 @@ export async function getMyCircles() {
 
 export async function getNearbyCircles(latitude: number, longitude: number, radiusKm = 500) {
   return (await request<{ circles: Circle[] }>(`/circles/nearby?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&radiusKm=${radiusKm}`)).circles;
+}
+
+export async function getNearbyPlaces(latitude: number, longitude: number, radiusKm = 15) {
+  return (await request<{ places: NearbyPlace[] }>(`/places/nearby?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&radiusKm=${radiusKm}`)).places;
 }
 
 export async function getCircleMatches(params: { level?: string; pagesPerDay?: number; minutesPerDay?: number }) {

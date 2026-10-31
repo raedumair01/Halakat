@@ -19,6 +19,7 @@ const GMAIL_USER = process.env.GMAIL_USER?.trim();
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD?.trim();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
 const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
+const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY?.trim();
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
@@ -196,8 +197,17 @@ function formatCircle(circle, userId) {
 }
 
 async function ensureDefaultCircles() {
-  if (await Circle.countDocuments()) return;
-  await Circle.insertMany(DEFAULT_CIRCLES);
+  // Demo circles were used during the initial UI build. Real discovery now
+  // comes from Google Places and user-created circles, so never seed demos in
+  // a production database.
+  return;
+}
+
+const LEGACY_DEMO_CIRCLE_NAMES = new Set(DEFAULT_CIRCLES.map(circle => circle.name));
+const LEGACY_DEMO_CREATORS = new Set(DEFAULT_CIRCLES.map(circle => circle.creatorName));
+
+function isLegacyDemoCircle(circle) {
+  return LEGACY_DEMO_CIRCLE_NAMES.has(circle.name) && LEGACY_DEMO_CREATORS.has(circle.creatorName);
 }
 
 // Each login creates a distinct server-side session. Revocation is checked on
@@ -824,8 +834,68 @@ function circleDistanceKm(latitude1, longitude1, latitude2, longitude2) {
 
 async function getAllCircles() {
   await ensureDefaultCircles();
-  return Circle.find().sort({ createdAt: -1 }).lean();
+  const circles = await Circle.find().sort({ createdAt: -1 }).lean();
+  return circles.filter(circle => !isLegacyDemoCircle(circle));
 }
+
+app.get('/places/nearby', authMiddleware, async (req, res) => {
+  try {
+    if (!GOOGLE_PLACES_API_KEY) {
+      return res.status(503).json({ message: 'Nearby place discovery is not configured yet.' });
+    }
+
+    const latitude = Number(req.query.latitude);
+    const longitude = Number(req.query.longitude);
+    const radiusKm = Math.min(50, Math.max(1, Number(req.query.radiusKm) || 15));
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return res.status(400).json({ message: 'A valid latitude and longitude are required.' });
+    }
+
+    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,places.primaryType,places.rating,places.userRatingCount',
+      },
+      body: JSON.stringify({
+        textQuery: 'mosque Islamic center Quran class halaqa',
+        languageCode: 'en',
+        maxResultCount: 20,
+        locationBias: {
+          circle: {
+            center: { latitude, longitude },
+            radius: radiusKm * 1000,
+          },
+        },
+      }),
+    });
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      console.error('Google Places search failed:', payload?.error?.message || response.status);
+      return res.status(502).json({ message: 'Nearby place discovery is temporarily unavailable.' });
+    }
+
+    const places = (payload?.places || []).map(place => ({
+      id: place.id,
+      name: place.displayName?.text || 'Islamic community location',
+      address: place.formattedAddress || 'Address unavailable',
+      latitude: place.location?.latitude,
+      longitude: place.location?.longitude,
+      mapsUrl: place.googleMapsUri || null,
+      type: place.primaryType || 'islamic_center',
+      rating: place.rating || null,
+      ratingCount: place.userRatingCount || 0,
+      source: 'Google Places',
+    })).filter(place => Number.isFinite(place.latitude) && Number.isFinite(place.longitude));
+
+    return res.json({ places, source: 'Google Places', radiusKm });
+  } catch (error) {
+    console.error('Nearby place discovery failed:', error);
+    return res.status(502).json({ message: 'Nearby place discovery is temporarily unavailable.' });
+  }
+});
 
 app.get('/circles', authMiddleware, async (req, res) => {
   try {
