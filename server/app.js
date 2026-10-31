@@ -874,6 +874,9 @@ app.get('/places/nearby', authMiddleware, async (req, res) => {
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
       console.error('Google Places search failed:', payload?.error?.message || response.status);
+      if (response.status === 403 && /not been used|disabled/i.test(payload?.error?.message || '')) {
+        return res.status(503).json({ message: 'Google Places is not enabled for the server project yet.' });
+      }
       return res.status(502).json({ message: 'Nearby place discovery is temporarily unavailable.' });
     }
 
