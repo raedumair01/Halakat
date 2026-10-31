@@ -9,10 +9,8 @@ import Svg, {
   Rect,
   Circle,
   Defs,
-  LinearGradient as SvgLinearGradient,
-  Stop,
-  ClipPath,
   G,
+  ClipPath,
   Mask,
 } from 'react-native-svg';
 
@@ -163,56 +161,6 @@ function ClipboardIllustration() {
       style={{ width: 185 * SCALE, height: 170 * SCALE }}
       resizeMode="contain"
     />
-  );
-}
-
-function ExistingPlanCurve() {
-  return (
-    <Svg width={224 * SCALE} height={224 * SCALE} viewBox="0 0 224 224" fill="none">
-      <Mask
-        id="existingCurveMask"
-        maskUnits="userSpaceOnUse"
-        x={0}
-        y={0}
-        width={224}
-        height={224}
-        maskType="alpha"
-      >
-        <Rect width={224} height={224} rx={112} fill="#E2F6F8" />
-      </Mask>
-      <G mask="url(#existingCurveMask)">
-        <Path
-          d="M161.296 168.711C207.835 115.271 242.523 102.47 268.463 107.128C295.895 112.054 304.047 144.947 300.824 172.631C295.507 218.307 257.541 253.201 211.58 254.654L-45.8919 262.796C-60.8377 263.268 -73.7541 252.44 -75.897 237.641C-79.5083 212.703 -50.8356 193.199 -26.9157 201.125C35.0974 221.672 113.253 223.878 161.296 168.711Z"
-          fill="#2BFF00"
-          fillOpacity={0.1}
-        />
-      </G>
-    </Svg>
-  );
-}
-
-function NewPlanCurve() {
-  return (
-     <Svg width={300} height={300} viewBox="0 0 224 224" fill="none">
-      <Mask
-        id="existingCurveMask"
-        maskUnits="userSpaceOnUse"
-        x={0}
-        y={0}
-        width={300}
-        height={300}
-        maskType="alpha"
-      >
-        <Rect width={224} height={224} rx={112} fill="#E2F6F8" />
-      </Mask>
-      <G mask="url(#existingCurveMask)">
-        <Path
-          d="M161.296 168.711C207.835 115.271 242.523 102.47 268.463 107.128C295.895 112.054 304.047 144.947 300.824 172.631C295.507 218.307 257.541 253.201 211.58 254.654L-45.8919 262.796C-60.8377 263.268 -73.7541 252.44 -75.897 237.641C-79.5083 212.703 -50.8356 193.199 -26.9157 201.125C35.0974 221.672 113.253 223.878 161.296 168.711Z"
-          fill="#061528"
-          fillOpacity={0.1}
-        />
-      </G>
-    </Svg>
   );
 }
 

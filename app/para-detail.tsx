@@ -12,11 +12,11 @@ type Surah = {
   englishName: string;
   englishNameTranslation: string;
   revelationType: string;
-  ayahs: Array<{
+  ayahs: {
     number: number;
     numberInSurah: number;
     juz: number;
-  }>;
+  }[];
 };
 
 type ParaSurah = {
