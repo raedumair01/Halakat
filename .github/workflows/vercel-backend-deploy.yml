@@ -37,6 +37,10 @@ jobs:
           npm run typecheck
 
       - name: Deploy to Vercel
-        run: npx vercel deploy --prod --yes --token="$VERCEL_TOKEN"
+        run: |
+          npx vercel pull --yes --environment=production
+          npx vercel deploy --prod --yes
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: team_AjcYuJgPWXrZLagzpuuYYEyA
+          VERCEL_PROJECT_ID: prj_JZ1sAeKjCvpoe8EwUjL1lNpCYHke
