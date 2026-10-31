@@ -252,7 +252,7 @@ function authRateLimit(maxRequests, windowMs = 15 * 60 * 1000) {
             },
           },
         ],
-        { upsert: true, new: true }
+        { upsert: true, new: true, updatePipeline: true }
       );
 
       if (bucket.count > maxRequests) {
