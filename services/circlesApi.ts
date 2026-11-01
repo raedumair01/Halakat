@@ -31,6 +31,7 @@ export type NearbyPlace = {
   rating: number | null;
   ratingCount: number;
   source: string;
+  distanceKm?: number;
 };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -72,8 +73,9 @@ export async function getNearbyCircles(latitude: number, longitude: number, radi
   return (await request<{ circles: Circle[] }>(`/circles/nearby?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&radiusKm=${radiusKm}`)).circles;
 }
 
-export async function getNearbyPlaces(latitude: number, longitude: number, radiusKm = 15) {
-  return (await request<{ places: NearbyPlace[] }>(`/places/nearby?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&radiusKm=${radiusKm}`)).places;
+export async function getNearbyPlaces(latitude: number, longitude: number, radiusKm = 15, search = '') {
+  const searchParam = search.trim() ? `&q=${encodeURIComponent(search.trim())}` : '';
+  return (await request<{ places: NearbyPlace[] }>(`/places/nearby?latitude=${encodeURIComponent(latitude)}&longitude=${encodeURIComponent(longitude)}&radiusKm=${radiusKm}${searchParam}`)).places;
 }
 
 export async function getCircleMatches(params: { level?: string; pagesPerDay?: number; minutesPerDay?: number }) {

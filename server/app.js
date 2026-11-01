@@ -892,16 +892,17 @@ app.get('/places/nearby', authMiddleware, async (req, res) => {
     const latitude = Number(req.query.latitude);
     const longitude = Number(req.query.longitude);
     const radiusKm = Math.min(50, Math.max(1, Number(req.query.radiusKm) || 15));
+    const searchText = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
       return res.status(400).json({ message: 'A valid latitude and longitude are required.' });
     }
 
     const latitudeDelta = radiusKm / 111;
     const longitudeDelta = radiusKm / (111 * Math.max(0.2, Math.cos((latitude * Math.PI) / 180)));
-    const payload = await searchOpenStreetMap('mosque', latitude, longitude, latitudeDelta, longitudeDelta);
+    const payload = await searchOpenStreetMap(searchText ? `${searchText} mosque` : 'mosque', latitude, longitude, latitudeDelta, longitudeDelta);
     // Some cities tag places as masjid or Islamic centre rather than mosque. Use
     // a small sequential fallback only when the primary search is sparse.
-    if (payload.length < 5) {
+    if (!searchText && payload.length < 5) {
       await new Promise(resolve => setTimeout(resolve, 1100));
       payload.push(...await searchOpenStreetMap('masjid', latitude, longitude, latitudeDelta, longitudeDelta));
       if (payload.length < 5) {
@@ -914,7 +915,9 @@ app.get('/places/nearby', authMiddleware, async (req, res) => {
       const latitudeValue = Number(place.lat);
       const longitudeValue = Number(place.lon);
       const id = `osm-${place.osm_type}-${place.osm_id}`;
+      const distanceKm = circleDistanceKm(latitude, longitude, latitudeValue, longitudeValue);
       if (seen.has(id) || !Number.isFinite(latitudeValue) || !Number.isFinite(longitudeValue)) return null;
+      if (distanceKm > radiusKm) return null;
       seen.add(id);
       return {
         id,
@@ -927,6 +930,7 @@ app.get('/places/nearby', authMiddleware, async (req, res) => {
         rating: null,
         ratingCount: 0,
         source: 'OpenStreetMap',
+        distanceKm: Number(distanceKm.toFixed(1)),
       };
     }).filter(Boolean).sort((first, second) => circleDistanceKm(latitude, longitude, first.latitude, first.longitude) - circleDistanceKm(latitude, longitude, second.latitude, second.longitude));
 

@@ -16,6 +16,7 @@ export function NearbyPlaceCard({ place }: { place: NearbyPlace }) {
         <View style={styles.copy}>
           <Text style={styles.name} numberOfLines={2}>{place.name}</Text>
           <Text style={styles.address} numberOfLines={2}>{place.address}</Text>
+          {typeof place.distanceKm === 'number' && <Text style={styles.distance}>{place.distanceKm < 1 ? `${Math.round(place.distanceKm * 1000)} m away` : `${place.distanceKm} km away`}</Text>}
         </View>
       </View>
       <View style={styles.footer}>
@@ -33,6 +34,7 @@ const styles = StyleSheet.create({
   copy: { flex: 1, minWidth: 0, marginLeft: 11 },
   name: { color: '#173B31', fontFamily: fonts.semiBold, fontSize: 15, lineHeight: 20 },
   address: { color: '#7B8C86', fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  distance: { color: '#0F6A53', fontFamily: fonts.semiBold, fontSize: 11, marginTop: 6 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 13 },
   source: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' },
   sourceText: { color: '#5A7B6F', fontFamily: fonts.medium, fontSize: 10 },
