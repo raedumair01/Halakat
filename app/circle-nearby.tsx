@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Linking from 'expo-linking';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -15,6 +15,7 @@ export default function CircleNearbyScreen() {
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [locationMessage, setLocationMessage] = useState('Requesting location permission…');
+  const [permissionAction, setPermissionAction] = useState<'request' | 'settings' | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -22,10 +23,12 @@ export default function CircleNearbyScreen() {
       const nearbyPlaces = await getNearbyPlaces(position.coords.latitude, position.coords.longitude, 50);
       setPlaces(nearbyPlaces);
       setLocationMessage('Real places found around your current location');
+      setPermissionAction(null);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to find nearby places right now.';
       setLocationMessage(message);
       if (error instanceof LocationPermissionError) {
+        setPermissionAction(error.canAskAgain ? 'request' : 'settings');
         showHalakatDialog('Location permission needed', message, [
           { text: 'Not now', style: 'cancel' },
           ...(error.canAskAgain ? [] : [{ text: 'Open Settings', onPress: () => Linking.openSettings() }]),
@@ -47,6 +50,7 @@ export default function CircleNearbyScreen() {
           <View style={styles.locationCopy}>
             <Text style={styles.locationTitle}>Live location discovery</Text>
             <Text style={styles.locationText}>{locationMessage}</Text>
+            {permissionAction && <TouchableOpacity style={styles.permissionButton} onPress={() => permissionAction === 'settings' ? void Linking.openSettings() : void load()}><Text style={styles.permissionButtonText}>{permissionAction === 'settings' ? 'Open Settings' : 'Allow location'}</Text></TouchableOpacity>}
           </View>
         </View>
         <Text style={styles.disclaimer}>Listings come from OpenStreetMap. A listed mosque or Islamic center may not currently host a Halakah, so confirm the schedule before visiting.</Text>
@@ -64,6 +68,8 @@ const styles = StyleSheet.create({
   locationCopy: { flex: 1, minWidth: 0 },
   locationTitle: { fontFamily: fonts.semiBold, color: '#173B31', fontSize: 13 },
   locationText: { fontFamily: fonts.regular, color: '#71817B', fontSize: 11, lineHeight: 16, marginTop: 3 },
+  permissionButton: { alignSelf: 'flex-start', backgroundColor: '#0F6A53', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 7, marginTop: 9 },
+  permissionButtonText: { color: '#FFF', fontFamily: fonts.semiBold, fontSize: 11 },
   disclaimer: { color: '#81918A', fontFamily: fonts.regular, fontSize: 11, lineHeight: 16, marginBottom: 16 },
   loader: { marginTop: 30 },
   empty: { marginTop: 35, alignItems: 'center', padding: 22 },

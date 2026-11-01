@@ -15,6 +15,7 @@ export default function CircleTopScreen() {
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('Requesting location permission…');
+  const [permissionAction, setPermissionAction] = useState<'request' | 'settings' | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -22,10 +23,12 @@ export default function CircleTopScreen() {
       const results = await getNearbyPlaces(position.coords.latitude, position.coords.longitude, 50);
       setPlaces(results);
       setMessage('Popular locations ranked from real nearby place data');
+      setPermissionAction(null);
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Unable to load popular locations right now.';
       setMessage(text);
       if (error instanceof LocationPermissionError) {
+        setPermissionAction(error.canAskAgain ? 'request' : 'settings');
         showHalakatDialog('Location permission needed', text, [
           { text: 'Not now', style: 'cancel' },
           ...(error.canAskAgain ? [] : [{ text: 'Open Settings', onPress: () => Linking.openSettings() }]),
@@ -45,7 +48,7 @@ export default function CircleTopScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <Header title="Top Nearby Locations" onBack={() => router.back()} />
         <Text style={styles.intro}>These are real mosques and Islamic centers found around your live location. They are not automatically confirmed Halakat, so check their schedule before attending.</Text>
-        <View style={styles.status}><Text style={styles.statusTitle}>Live location ranking</Text><Text style={styles.statusText}>{message}</Text></View>
+        <View style={styles.status}><Text style={styles.statusTitle}>Live location ranking</Text><Text style={styles.statusText}>{message}</Text>{permissionAction && <TouchableOpacity style={styles.permissionButton} onPress={() => permissionAction === 'settings' ? void Linking.openSettings() : void load()}><Text style={styles.permissionButtonText}>{permissionAction === 'settings' ? 'Open Settings' : 'Allow location'}</Text></TouchableOpacity>}</View>
         {loading ? <ActivityIndicator color="#0F6A53" style={styles.loader} /> : places.length ? places.map(place => <NearbyPlaceCard key={place.id} place={place} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>No real locations found</Text><Text style={styles.emptyText}>Allow location access, then try again. We search up to 50 km for real mosques and Islamic centers.</Text></View>}
       </ScrollView>
     </SafeAreaView>
@@ -66,6 +69,8 @@ const styles = StyleSheet.create({
   status: { backgroundColor: '#E8F5EB', borderRadius: 18, padding: 15, marginBottom: 17 },
   statusTitle: { fontFamily: fonts.semiBold, color: '#173B31', fontSize: 13 },
   statusText: { fontFamily: fonts.regular, color: '#71817B', fontSize: 11, lineHeight: 16, marginTop: 3 },
+  permissionButton: { alignSelf: 'flex-start', backgroundColor: '#0F6A53', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 7, marginTop: 9 },
+  permissionButtonText: { color: '#FFF', fontFamily: fonts.semiBold, fontSize: 11 },
   loader: { marginTop: 30 },
   empty: { marginTop: 35, alignItems: 'center', padding: 22 },
   emptyTitle: { fontFamily: fonts.semiBold, color: '#173B31', fontSize: 17 },
