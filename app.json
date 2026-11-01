@@ -31,7 +31,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Halakat to access your location to show accurate prayer times."
+          "locationWhenInUsePermission": "Allow Halakat to use your location to find nearby Halakaat and show accurate prayer times."
         }
       ],
       "expo-asset",
