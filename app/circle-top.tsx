@@ -41,7 +41,7 @@ export default function CircleTopScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.content}>
         <Header title="Top Nearby Locations" onBack={() => router.back()} />
-        <Text style={styles.intro}>These are real mosques and Islamic centers ranked by nearby public ratings. They are not automatically confirmed Halakat, so check their schedule before attending.</Text>
+        <Text style={styles.intro}>These are real mosques and Islamic centers found around your live location. They are not automatically confirmed Halakat, so check their schedule before attending.</Text>
         <View style={styles.status}><Text style={styles.statusTitle}>Live location ranking</Text><Text style={styles.statusText}>{message}</Text></View>
         {loading ? <ActivityIndicator color="#0F6A53" style={styles.loader} /> : places.length ? places.map(place => <NearbyPlaceCard key={place.id} place={place} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>No real locations found</Text><Text style={styles.emptyText}>Enable Google Places and location permission, then try again.</Text></View>}
       </ScrollView>

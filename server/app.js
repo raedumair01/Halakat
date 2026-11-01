@@ -19,7 +19,6 @@ const GMAIL_USER = process.env.GMAIL_USER?.trim();
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD?.trim();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
 const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
-const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY?.trim();
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
@@ -840,10 +839,6 @@ async function getAllCircles() {
 
 app.get('/places/nearby', authMiddleware, async (req, res) => {
   try {
-    if (!GOOGLE_PLACES_API_KEY) {
-      return res.status(503).json({ message: 'Nearby place discovery is not configured yet.' });
-    }
-
     const latitude = Number(req.query.latitude);
     const longitude = Number(req.query.longitude);
     const radiusKm = Math.min(50, Math.max(1, Number(req.query.radiusKm) || 15));
@@ -851,49 +846,38 @@ app.get('/places/nearby', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'A valid latitude and longitude are required.' });
     }
 
-    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    const radiusMeters = Math.round(radiusKm * 1000);
+    const query = `[out:json][timeout:20];(nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["religion"="muslim"];nwr(around:${radiusMeters},${latitude},${longitude})["amenity"="place_of_worship"]["name"~"mosque|masjid|islamic|quran|halaqa",i];);out center tags;`;
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_PLACES_API_KEY,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.googleMapsUri,places.primaryType,places.rating,places.userRatingCount',
-      },
-      body: JSON.stringify({
-        textQuery: 'mosque Islamic center Quran class halaqa',
-        languageCode: 'en',
-        maxResultCount: 20,
-        locationBias: {
-          circle: {
-            center: { latitude, longitude },
-            radius: radiusKm * 1000,
-          },
-        },
-      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Halakat/1.0 (nearby community discovery)' },
+      body: new URLSearchParams({ data: query }).toString(),
     });
-
+    if (!response.ok) return res.status(502).json({ message: 'OpenStreetMap discovery is temporarily unavailable.' });
     const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      console.error('Google Places search failed:', payload?.error?.message || response.status);
-      if (response.status === 403 && /not been used|disabled/i.test(payload?.error?.message || '')) {
-        return res.status(503).json({ message: 'Google Places is not enabled for the server project yet.' });
-      }
-      return res.status(502).json({ message: 'Nearby place discovery is temporarily unavailable.' });
-    }
+    const seen = new Set();
+    const places = (payload?.elements || []).map(element => {
+      const latitudeValue = element.lat ?? element.center?.lat;
+      const longitudeValue = element.lon ?? element.center?.lon;
+      const tags = element.tags || {};
+      const id = `osm-${element.type}-${element.id}`;
+      if (seen.has(id) || !Number.isFinite(latitudeValue) || !Number.isFinite(longitudeValue)) return null;
+      seen.add(id);
+      return {
+        id,
+        name: tags.name || tags['name:en'] || 'Mosque or Islamic center',
+        address: [tags['addr:housenumber'], tags['addr:street'], tags['addr:city']].filter(Boolean).join(', ') || 'Address listed on OpenStreetMap',
+        latitude: latitudeValue,
+        longitude: longitudeValue,
+        mapsUrl: `https://www.openstreetmap.org/${element.type}/${element.id}`,
+        type: tags.amenity || 'place_of_worship',
+        rating: null,
+        ratingCount: 0,
+        source: 'OpenStreetMap',
+      };
+    }).filter(Boolean).sort((first, second) => circleDistanceKm(latitude, longitude, first.latitude, first.longitude) - circleDistanceKm(latitude, longitude, second.latitude, second.longitude));
 
-    const places = (payload?.places || []).map(place => ({
-      id: place.id,
-      name: place.displayName?.text || 'Islamic community location',
-      address: place.formattedAddress || 'Address unavailable',
-      latitude: place.location?.latitude,
-      longitude: place.location?.longitude,
-      mapsUrl: place.googleMapsUri || null,
-      type: place.primaryType || 'islamic_center',
-      rating: place.rating || null,
-      ratingCount: place.userRatingCount || 0,
-      source: 'Google Places',
-    })).filter(place => Number.isFinite(place.latitude) && Number.isFinite(place.longitude));
-
-    return res.json({ places, source: 'Google Places', radiusKm });
+    return res.json({ places, source: 'OpenStreetMap', radiusKm });
   } catch (error) {
     console.error('Nearby place discovery failed:', error);
     return res.status(502).json({ message: 'Nearby place discovery is temporarily unavailable.' });

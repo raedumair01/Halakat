@@ -45,7 +45,7 @@ export default function CircleNearbyScreen() {
             <Text style={styles.locationText}>{locationMessage}</Text>
           </View>
         </View>
-        <Text style={styles.disclaimer}>Listings come from Google Places. A listed mosque or Islamic center may not currently host a Halakah, so confirm the schedule before visiting.</Text>
+        <Text style={styles.disclaimer}>Listings come from OpenStreetMap. A listed mosque or Islamic center may not currently host a Halakah, so confirm the schedule before visiting.</Text>
         {loading ? <ActivityIndicator color="#0F6A53" style={styles.loader} /> : places.length ? places.map(place => <NearbyPlaceCard key={place.id} place={place} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>No nearby places found</Text><Text style={styles.emptyText}>Try again from a different location or expand the search later.</Text></View>}
       </ScrollView>
     </SafeAreaView>

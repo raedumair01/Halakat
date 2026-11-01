@@ -19,7 +19,7 @@ export function NearbyPlaceCard({ place }: { place: NearbyPlace }) {
         </View>
       </View>
       <View style={styles.footer}>
-        <View style={styles.source}><Text style={styles.sourceText}>Google Places</Text>{place.rating ? <><Star size={12} color="#D69B32" fill="#D69B32" /><Text style={styles.rating}>{place.rating.toFixed(1)} ({place.ratingCount})</Text></> : null}</View>
+        <View style={styles.source}><Text style={styles.sourceText}>{place.source}</Text>{place.rating ? <><Star size={12} color="#D69B32" fill="#D69B32" /><Text style={styles.rating}>{place.rating.toFixed(1)} ({place.ratingCount})</Text></> : null}</View>
         <TouchableOpacity style={styles.mapButton} onPress={openMaps} disabled={!place.mapsUrl}><Text style={styles.mapButtonText}>Open Maps</Text><ExternalLink size={14} color="#FFF" /></TouchableOpacity>
       </View>
     </View>
