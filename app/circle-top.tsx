@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import * as Location from 'expo-location';
+import * as Linking from 'expo-linking';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
@@ -8,28 +8,31 @@ import { getNearbyPlaces, NearbyPlace } from '../services/circlesApi';
 import { fonts } from '../constants/fonts';
 import { NearbyPlaceCard } from '../components/NearbyPlaceCard';
 import { showHalakatDialog } from '../services/dialogService';
+import { getLiveLocation, LocationPermissionError } from '../services/location';
 
 export default function CircleTopScreen() {
   const router = useRouter();
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('Finding popular Islamic centers near you…');
+  const [message, setMessage] = useState('Requesting location permission…');
 
   const load = useCallback(async () => {
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== 'granted') {
-        setMessage('Location permission is required to rank nearby places.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const position = await getLiveLocation();
       const results = await getNearbyPlaces(position.coords.latitude, position.coords.longitude, 50);
-      setPlaces([...results].sort((first, second) => ((second.rating || 0) * Math.log10((second.ratingCount || 0) + 1)) - ((first.rating || 0) * Math.log10((first.ratingCount || 0) + 1))));
+      setPlaces(results);
       setMessage('Popular locations ranked from real nearby place data');
     } catch (error) {
       const text = error instanceof Error ? error.message : 'Unable to load popular locations right now.';
       setMessage(text);
-      showHalakatDialog('Top locations unavailable', text);
+      if (error instanceof LocationPermissionError) {
+        showHalakatDialog('Location permission needed', text, [
+          { text: 'Not now', style: 'cancel' },
+          ...(error.canAskAgain ? [] : [{ text: 'Open Settings', onPress: () => Linking.openSettings() }]),
+        ]);
+      } else {
+        showHalakatDialog('Top locations unavailable', text);
+      }
     } finally {
       setLoading(false);
     }
@@ -43,7 +46,7 @@ export default function CircleTopScreen() {
         <Header title="Top Nearby Locations" onBack={() => router.back()} />
         <Text style={styles.intro}>These are real mosques and Islamic centers found around your live location. They are not automatically confirmed Halakat, so check their schedule before attending.</Text>
         <View style={styles.status}><Text style={styles.statusTitle}>Live location ranking</Text><Text style={styles.statusText}>{message}</Text></View>
-        {loading ? <ActivityIndicator color="#0F6A53" style={styles.loader} /> : places.length ? places.map(place => <NearbyPlaceCard key={place.id} place={place} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>No real locations found</Text><Text style={styles.emptyText}>Enable Google Places and location permission, then try again.</Text></View>}
+        {loading ? <ActivityIndicator color="#0F6A53" style={styles.loader} /> : places.length ? places.map(place => <NearbyPlaceCard key={place.id} place={place} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>No real locations found</Text><Text style={styles.emptyText}>Allow location access, then try again. We search up to 50 km for real mosques and Islamic centers.</Text></View>}
       </ScrollView>
     </SafeAreaView>
   );

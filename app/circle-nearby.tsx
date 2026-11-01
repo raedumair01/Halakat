@@ -1,32 +1,36 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
-import * as Location from 'expo-location';
+import * as Linking from 'expo-linking';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { getNearbyPlaces, NearbyPlace } from '../services/circlesApi';
 import { fonts } from '../constants/fonts';
 import { Header } from './circle-top';
 import { NearbyPlaceCard } from '../components/NearbyPlaceCard';
+import { getLiveLocation, LocationPermissionError } from '../services/location';
+import { showHalakatDialog } from '../services/dialogService';
 
 export default function CircleNearbyScreen() {
   const router = useRouter();
   const [places, setPlaces] = useState<NearbyPlace[]>([]);
   const [loading, setLoading] = useState(true);
-  const [locationMessage, setLocationMessage] = useState('Finding real Islamic centers near you…');
+  const [locationMessage, setLocationMessage] = useState('Requesting location permission…');
 
   const load = useCallback(async () => {
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (permission.status !== 'granted') {
-        setLocationMessage('Location permission is needed to find nearby places.');
-        return;
-      }
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const nearbyPlaces = await getNearbyPlaces(position.coords.latitude, position.coords.longitude);
+      const position = await getLiveLocation();
+      const nearbyPlaces = await getNearbyPlaces(position.coords.latitude, position.coords.longitude, 50);
       setPlaces(nearbyPlaces);
       setLocationMessage('Real places found around your current location');
     } catch (error) {
-      setLocationMessage(error instanceof Error ? error.message : 'Unable to find nearby places right now.');
+      const message = error instanceof Error ? error.message : 'Unable to find nearby places right now.';
+      setLocationMessage(message);
+      if (error instanceof LocationPermissionError) {
+        showHalakatDialog('Location permission needed', message, [
+          { text: 'Not now', style: 'cancel' },
+          ...(error.canAskAgain ? [] : [{ text: 'Open Settings', onPress: () => Linking.openSettings() }]),
+        ]);
+      }
     } finally {
       setLoading(false);
     }
@@ -46,7 +50,7 @@ export default function CircleNearbyScreen() {
           </View>
         </View>
         <Text style={styles.disclaimer}>Listings come from OpenStreetMap. A listed mosque or Islamic center may not currently host a Halakah, so confirm the schedule before visiting.</Text>
-        {loading ? <ActivityIndicator color="#0F6A53" style={styles.loader} /> : places.length ? places.map(place => <NearbyPlaceCard key={place.id} place={place} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>No nearby places found</Text><Text style={styles.emptyText}>Try again from a different location or expand the search later.</Text></View>}
+        {loading ? <ActivityIndicator color="#0F6A53" style={styles.loader} /> : places.length ? places.map(place => <NearbyPlaceCard key={place.id} place={place} />) : <View style={styles.empty}><Text style={styles.emptyTitle}>No nearby places found</Text><Text style={styles.emptyText}>Allow location access, then try again. We search up to 50 km for real mosques and Islamic centers.</Text></View>}
       </ScrollView>
     </SafeAreaView>
   );

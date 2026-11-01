@@ -851,6 +851,24 @@ async function getAllCircles() {
   return circles.filter(circle => !isLegacyDemoCircle(circle));
 }
 
+async function searchOpenStreetMap(queryText, latitude, longitude, latitudeDelta, longitudeDelta) {
+  const query = new URLSearchParams({
+    format: 'jsonv2',
+    q: queryText,
+    viewbox: `${longitude - longitudeDelta},${latitude + latitudeDelta},${longitude + longitudeDelta},${latitude - latitudeDelta}`,
+    bounded: '1',
+    limit: '30',
+    addressdetails: '1',
+    'accept-language': 'en',
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?${query.toString()}`, {
+    headers: { Accept: 'application/json', 'User-Agent': 'Halakat/1.0 (nearby community discovery)' },
+  });
+  if (!response.ok) return [];
+  const payload = await response.json().catch(() => null);
+  return Array.isArray(payload) ? payload : [];
+}
+
 app.get('/places/nearby', authMiddleware, async (req, res) => {
   try {
     const latitude = Number(req.query.latitude);
@@ -862,20 +880,17 @@ app.get('/places/nearby', authMiddleware, async (req, res) => {
 
     const latitudeDelta = radiusKm / 111;
     const longitudeDelta = radiusKm / (111 * Math.max(0.2, Math.cos((latitude * Math.PI) / 180)));
-    const query = new URLSearchParams({
-      format: 'jsonv2',
-      q: 'mosque',
-      viewbox: `${longitude - longitudeDelta},${latitude + latitudeDelta},${longitude + longitudeDelta},${latitude - latitudeDelta}`,
-      bounded: '1',
-      limit: '30',
-      addressdetails: '1',
-      'accept-language': 'en',
-    });
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?${query.toString()}`, {
-      headers: { Accept: 'application/json', 'User-Agent': 'Halakat/1.0 (nearby community discovery)' },
-    });
-    if (!response.ok) return res.status(502).json({ message: 'OpenStreetMap discovery is temporarily unavailable.' });
-    const payload = await response.json().catch(() => null);
+    const payload = await searchOpenStreetMap('mosque', latitude, longitude, latitudeDelta, longitudeDelta);
+    // Some cities tag places as masjid or Islamic centre rather than mosque. Use
+    // a small sequential fallback only when the primary search is sparse.
+    if (payload.length < 5) {
+      await new Promise(resolve => setTimeout(resolve, 1100));
+      payload.push(...await searchOpenStreetMap('masjid', latitude, longitude, latitudeDelta, longitudeDelta));
+      if (payload.length < 5) {
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        payload.push(...await searchOpenStreetMap('Islamic center', latitude, longitude, latitudeDelta, longitudeDelta));
+      }
+    }
     const seen = new Set();
     const places = (Array.isArray(payload) ? payload : []).map(place => {
       const latitudeValue = Number(place.lat);
