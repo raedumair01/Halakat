@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { AppState } from 'react-native';
 import { clearActiveSession, getActiveSession, setActiveSession } from '../services/authSession';
-import { getProfile, login, logout, signup, updateProfile, type UserProfile } from '../services/authApi';
+import { getProfile, login, logout, refreshSession, signup, updateProfile, type UserProfile } from '../services/authApi';
 
 type SessionUser = UserProfile;
 
@@ -40,11 +41,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const freshUser = await getProfile(session.token);
+        const refreshed = await refreshSession(session.token);
         if (!isMounted) return;
 
-        setToken(session.token);
-        await syncSessionUser(session.token, freshUser);
+        setToken(refreshed.token);
+        await syncSessionUser(refreshed.token, refreshed.user);
       } catch (error) {
         console.error('Failed to restore auth session:', error);
         await clearActiveSession();
@@ -61,6 +62,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isReady || !token) return;
+
+    const refreshWhenActive = async (state: string) => {
+      if (state !== 'active') return;
+      try {
+        const refreshed = await refreshSession(token);
+        setToken(refreshed.token);
+        await syncSessionUser(refreshed.token, refreshed.user);
+      } catch (error) {
+        console.warn('Background session refresh failed:', error);
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', refreshWhenActive);
+    return () => subscription.remove();
+  }, [isReady, token]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

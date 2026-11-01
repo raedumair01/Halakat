@@ -119,6 +119,13 @@ export async function getProfile(token: string) {
   return response.user;
 }
 
+export async function refreshSession(token: string) {
+  return request<AuthResponse>('/auth/refresh', {
+    method: 'POST',
+    token,
+  });
+}
+
 export async function updateProfile(
   token: string,
   payload: Partial<Pick<UserProfile, 'fullName' | 'bio' | 'location' | 'streakGoal'>>

@@ -315,10 +315,10 @@ const SignupVerification =
 
 async function createAuthSession(userId) {
   const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
   await AuthSession.create({ sessionId, userId, expiresAt });
-  const token = jwt.sign({ userId, sid: sessionId }, JWT_SECRET, { expiresIn: '7d' });
+  const token = jwt.sign({ userId, sid: sessionId }, JWT_SECRET, { expiresIn: '30d' });
 
   return { token, sessionId };
 }
@@ -720,6 +720,20 @@ app.post('/auth/logout', authMiddleware, async (req, res) => {
 
 app.get('/auth/profile', authMiddleware, async (req, res) => {
   return res.json({ user: formatUser(req.user) });
+});
+
+app.post('/auth/refresh', authMiddleware, async (req, res) => {
+  try {
+    const { token, sessionId } = await createAuthSession(req.user._id.toString());
+    await AuthSession.updateOne(
+      { sessionId: req.authSessionId, revokedAt: null },
+      { $set: { revokedAt: new Date() } }
+    );
+    return res.json({ token, sessionId, user: formatUser(req.user) });
+  } catch (error) {
+    console.error('Session refresh failed:', error);
+    return res.status(500).json({ message: 'Unable to refresh your session right now.' });
+  }
 });
 
 app.patch('/auth/profile', authMiddleware, async (req, res) => {
