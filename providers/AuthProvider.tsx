@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { clearActiveSession, getActiveSession, setActiveSession } from '../services/authSession';
 import { getProfile, login, logout, refreshSession, signup, updateProfile, type UserProfile } from '../services/authApi';
@@ -24,10 +24,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const refreshTokenRef = useRef<string | null>(null);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
 
-  const syncSessionUser = async (nextToken: string, nextUser: SessionUser) => {
+  const syncSessionUser = async (nextToken: string, nextUser: SessionUser, nextRefreshToken?: string) => {
     setUser(nextUser);
-    await setActiveSession({ token: nextToken, user: nextUser });
+    if (nextRefreshToken) refreshTokenRef.current = nextRefreshToken;
+    await setActiveSession({ token: nextToken, refreshToken: nextRefreshToken || refreshTokenRef.current || undefined, user: nextUser });
   };
 
   useEffect(() => {
@@ -41,11 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const refreshed = await refreshSession(session.token);
+        const refreshed = await refreshSession(session.refreshToken || session.token, session.refreshToken ? undefined : session.token);
         if (!isMounted) return;
 
         setToken(refreshed.token);
-        await syncSessionUser(refreshed.token, refreshed.user);
+        await syncSessionUser(refreshed.token, refreshed.user, refreshed.refreshToken);
       } catch (error) {
         console.error('Failed to restore auth session:', error);
         await clearActiveSession();
@@ -68,13 +71,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const refreshWhenActive = async (state: string) => {
       if (state !== 'active') return;
-      try {
-        const refreshed = await refreshSession(token);
-        setToken(refreshed.token);
-        await syncSessionUser(refreshed.token, refreshed.user);
-      } catch (error) {
-        console.warn('Background session refresh failed:', error);
-      }
+      if (refreshInFlightRef.current) return refreshInFlightRef.current;
+      const task = (async () => {
+        try {
+          const session = await getActiveSession();
+          if (!session?.token) return;
+          const refreshed = await refreshSession(session.refreshToken || session.token, session.refreshToken ? undefined : session.token);
+          setToken(refreshed.token);
+          await syncSessionUser(refreshed.token, refreshed.user, refreshed.refreshToken);
+        } catch (error) {
+          console.warn('Background session refresh failed:', error);
+        }
+      })();
+      refreshInFlightRef.current = task;
+      await task.finally(() => { refreshInFlightRef.current = null; });
     };
 
     const subscription = AppState.addEventListener('change', refreshWhenActive);
@@ -90,12 +100,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async signIn(payload) {
         const response = await login(payload);
         setToken(response.token);
-        await syncSessionUser(response.token, response.user);
+        await syncSessionUser(response.token, response.user, response.refreshToken);
       },
       async signUp(payload) {
         const response = await signup(payload);
         setToken(response.token);
-        await syncSessionUser(response.token, response.user);
+        await syncSessionUser(response.token, response.user, response.refreshToken);
       },
       async signOut() {
         const activeToken = token;
@@ -109,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } finally {
           setToken(null);
           setUser(null);
+          refreshTokenRef.current = null;
           await clearActiveSession();
         }
       },

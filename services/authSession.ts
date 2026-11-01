@@ -4,6 +4,7 @@ import type { UserProfile } from './authApi';
 
 export type StoredSession = {
   token: string;
+  refreshToken?: string;
   user: UserProfile;
   createdAt: string;
 };
@@ -48,10 +49,12 @@ function getStorageAdapter(): StorageAdapter {
 
 export async function setActiveSession(session: {
   token: string;
+  refreshToken?: string;
   user: UserProfile;
 }): Promise<void> {
   const payload: StoredSession = {
     token: session.token,
+    refreshToken: session.refreshToken,
     user: session.user,
     createdAt: new Date().toISOString(),
   };

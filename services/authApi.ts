@@ -14,6 +14,7 @@ export type UserProfile = {
 
 export type AuthResponse = {
   token: string;
+  refreshToken?: string;
   user: UserProfile;
 };
 
@@ -119,10 +120,10 @@ export async function getProfile(token: string) {
   return response.user;
 }
 
-export async function refreshSession(token: string) {
+export async function refreshSession(refreshToken: string, legacyToken?: string) {
   return request<AuthResponse>('/auth/refresh', {
     method: 'POST',
-    token,
+    body: { refreshToken, ...(legacyToken ? { token: legacyToken } : {}) },
   });
 }
 

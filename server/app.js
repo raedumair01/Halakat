@@ -215,6 +215,7 @@ const authSessionSchema = new mongoose.Schema(
   {
     sessionId: { type: String, required: true, unique: true, index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    refreshTokenHash: { type: String, required: false, index: true },
     expiresAt: { type: Date, required: true },
     revokedAt: { type: Date, default: null },
   },
@@ -315,12 +316,13 @@ const SignupVerification =
 
 async function createAuthSession(userId) {
   const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  const refreshToken = crypto.randomBytes(48).toString('base64url');
+  const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
 
-  await AuthSession.create({ sessionId, userId, expiresAt });
+  await AuthSession.create({ sessionId, userId, refreshTokenHash: hashOtp(refreshToken), expiresAt });
   const token = jwt.sign({ userId, sid: sessionId }, JWT_SECRET, { expiresIn: '30d' });
 
-  return { token, sessionId };
+  return { token, refreshToken, sessionId };
 }
 
 function hashOtp(token) {
@@ -578,8 +580,8 @@ app.post('/auth/signup', authRateLimit(5), async (req, res) => {
     });
     await SignupVerification.deleteOne({ email: normalizedEmail });
 
-    const { token } = await createAuthSession(user._id.toString());
-    return res.status(201).json({ token, user: formatUser(user) });
+    const session = await createAuthSession(user._id.toString());
+    return res.status(201).json({ ...session, user: formatUser(user) });
   } catch (error) {
     console.error('Signup failed:', error);
     return res.status(500).json({ message: 'Unable to create account right now.' });
@@ -605,8 +607,8 @@ app.post('/auth/login', authRateLimit(5), async (req, res) => {
       return res.status(401).json({ message: 'Incorrect email or password.' });
     }
 
-    const { token } = await createAuthSession(user._id.toString());
-    return res.json({ token, user: formatUser(user) });
+    const session = await createAuthSession(user._id.toString());
+    return res.json({ ...session, user: formatUser(user) });
   } catch (error) {
     console.error('Login failed:', error);
     return res.status(500).json({ message: 'Unable to log in right now.' });
@@ -722,15 +724,31 @@ app.get('/auth/profile', authMiddleware, async (req, res) => {
   return res.json({ user: formatUser(req.user) });
 });
 
-app.post('/auth/refresh', authMiddleware, async (req, res) => {
+app.post('/auth/refresh', async (req, res) => {
   try {
-    const { token, sessionId } = await createAuthSession(req.user._id.toString());
-    await AuthSession.updateOne(
-      { sessionId: req.authSessionId, revokedAt: null },
-      { $set: { revokedAt: new Date() } }
-    );
-    return res.json({ token, sessionId, user: formatUser(req.user) });
+    const { refreshToken, token: legacyToken } = req.body ?? {};
+    let session;
+
+    if (typeof refreshToken === 'string' && refreshToken.length >= 32) {
+      session = await AuthSession.findOne({ refreshTokenHash: hashOtp(refreshToken), revokedAt: null, expiresAt: { $gt: new Date() } });
+    } else if (typeof legacyToken === 'string') {
+      const decoded = jwt.verify(legacyToken, JWT_SECRET);
+      if (typeof decoded.sid === 'string' && typeof decoded.userId === 'string') {
+        session = await AuthSession.findOne({ sessionId: decoded.sid, userId: decoded.userId, revokedAt: null, expiresAt: { $gt: new Date() } });
+      }
+    }
+
+    if (!session) return res.status(401).json({ message: 'Refresh token has expired. Please sign in again.' });
+    const user = await User.findById(session.userId);
+    if (!user) return res.status(401).json({ message: 'Session is no longer valid. Please sign in again.' });
+
+    const nextSession = await createAuthSession(user._id.toString());
+    await AuthSession.updateOne({ _id: session._id, revokedAt: null }, { $set: { revokedAt: new Date() } });
+    return res.json({ ...nextSession, user: formatUser(user) });
   } catch (error) {
+    if (error?.name === 'JsonWebTokenError' || error?.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Refresh token has expired. Please sign in again.' });
+    }
     console.error('Session refresh failed:', error);
     return res.status(500).json({ message: 'Unable to refresh your session right now.' });
   }
