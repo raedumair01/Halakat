@@ -139,10 +139,7 @@ export default function SurahDetailScreen() {
             const ayahNumber = parseInt(item.aya);
 
             if (index === 0 && startsWithBismillah(text)) {
-              const { removed, remaining } = removeFirstFourWords(text);
-              
-              if (removed) {
-              }
+              const { remaining } = removeFirstFourWords(text);
               
               if (!remaining.trim()) {
                 removedStandaloneBismillah = true;
@@ -184,10 +181,7 @@ export default function SurahDetailScreen() {
             const text = ayah.text || '';
             
             if (ayah.numberInSurah === 1 && startsWithBismillah(text)) {
-              const { removed, remaining } = removeFirstFourWords(text);
-              
-              if (removed) {
-              }
+              const { remaining } = removeFirstFourWords(text);
               
               if (!remaining.trim()) {
                 removedStandaloneBismillah = true;
