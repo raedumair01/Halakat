@@ -111,7 +111,6 @@ export default function SurahDetailScreen() {
       }
       
       // Remove the first four words from the first ayah (Bismillah) when present
-      let bismillahText = 'بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ';
       let removedStandaloneBismillah = false;
       
       const startsWithBismillah = (text: string) => {
@@ -143,7 +142,6 @@ export default function SurahDetailScreen() {
               const { removed, remaining } = removeFirstFourWords(text);
               
               if (removed) {
-                bismillahText = removed;
               }
               
               if (!remaining.trim()) {
@@ -189,7 +187,6 @@ export default function SurahDetailScreen() {
               const { removed, remaining } = removeFirstFourWords(text);
               
               if (removed) {
-                bismillahText = removed;
               }
               
               if (!remaining.trim()) {
@@ -336,9 +333,9 @@ export default function SurahDetailScreen() {
 
   useEffect(() => {
     if (surahNumber) {
-      void fetchSurahData();
+      void Promise.resolve().then(fetchSurahData);
     }
-  }, [fetchSurahData]);
+  }, [fetchSurahData, surahNumber]);
 
   const visibleAyahs = useMemo(
     () => (surah ? surah.ayahs.filter((ayah) => ayah.numberInSurah >= startAyah) : []),
