@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -280,10 +280,6 @@ export default function PrayerTab() {
     },
     [applyPrayerPayload, loadCachedPrayerTimes]
   );
-
-  useEffect(() => {
-    loadPrayerTimes();
-  }, [loadPrayerTimes]);
 
   useFocusEffect(
     useCallback(() => {

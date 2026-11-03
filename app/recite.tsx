@@ -347,7 +347,7 @@ export default function ReciteScreen() {
   const [aiConfigured, setAiConfigured] = useState(false);
   const [showVerses, setShowVerses] = useState(true);
   const [recordEnabled, setRecordEnabled] = useState(false);
-  const [currentAyahIndex, setCurrentAyahIndex] = useState(0);
+  const [storedAyahIndex, setCurrentAyahIndex] = useState(0);
   const [statusMessage, setStatusMessage] = useState('Tap record to begin reciting.');
   const [isMicPermissionDenied, setIsMicPermissionDenied] = useState(false);
   const [completedVerses, setCompletedVerses] = useState<Set<number>>(new Set());
@@ -361,6 +361,7 @@ export default function ReciteScreen() {
   const recorderState = useAudioRecorderState(recorder, 500);
   const surahAyahs = surahData?.ayahs ?? [];
   const ayahCount = surahAyahs.length;
+  const currentAyahIndex = ayahCount > 0 ? storedAyahIndex % ayahCount : 0;
   const currentAyahText = surahAyahs[currentAyahIndex]?.text ?? '';
   const isSurahFinished = ayahCount > 0 && completedVerses.size === ayahCount;
 
@@ -446,12 +447,6 @@ export default function ReciteScreen() {
       setStatusMessage('Could not check microphone permission. Please try again.');
     }
   };
-
-  useEffect(() => {
-    if (currentAyahIndex >= ayahCount && ayahCount > 0) {
-      setCurrentAyahIndex(0);
-    }
-  }, [currentAyahIndex, ayahCount]);
 
   // Analyze the recorded audio to verify if the verse was recited correctly.
   const analyzeRecording = async (uri: string, ayahIndex: number, durationSeconds: number): Promise<AnalysisResult> => {

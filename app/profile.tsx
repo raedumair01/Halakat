@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -25,18 +25,6 @@ export default function ProfileScreen() {
   const [location, setLocation] = useState(user?.location ?? '');
   const [streakGoal, setStreakGoal] = useState(String(user?.streakGoal ?? 30));
   const [saving, setSaving] = useState(false);
-  const [hasEdited, setHasEdited] = useState(false);
-
-  useEffect(() => {
-    // Keep form in sync with context updates (e.g. after a successful save),
-    // but never clobber the user's in-progress edits.
-    if (hasEdited) return;
-    setFullName(user?.fullName ?? '');
-    setBio(user?.bio ?? '');
-    setLocation(user?.location ?? '');
-    setStreakGoal(String(user?.streakGoal ?? 30));
-  }, [hasEdited, user?.bio, user?.fullName, user?.location, user?.streakGoal]);
-
   const stats = useMemo(
     () => [
       { label: 'Circles', value: String(user?.circlesJoined ?? 0) },
@@ -59,7 +47,6 @@ export default function ProfileScreen() {
         location: nextLocation,
         streakGoal: nextStreak,
       });
-      setHasEdited(false);
       setFullName(nextFullName);
       setBio(nextBio);
       setLocation(nextLocation);
@@ -115,7 +102,6 @@ export default function ProfileScreen() {
                 label="Full name"
                 value={fullName}
                 onChangeText={(value) => {
-                  setHasEdited(true);
                   setFullName(value);
                   updateLocalProfile({ fullName: value });
                 }}
@@ -125,7 +111,6 @@ export default function ProfileScreen() {
                 label="Location"
                 value={location}
                 onChangeText={(value) => {
-                  setHasEdited(true);
                   setLocation(value);
                   updateLocalProfile({ location: value });
                 }}
@@ -135,7 +120,6 @@ export default function ProfileScreen() {
                 label="Bio"
                 value={bio}
                 onChangeText={(value) => {
-                  setHasEdited(true);
                   setBio(value);
                   updateLocalProfile({ bio: value });
                 }}
@@ -146,7 +130,6 @@ export default function ProfileScreen() {
                 label="Streak goal (days)"
                 value={streakGoal}
                 onChangeText={(value) => {
-                  setHasEdited(true);
                   setStreakGoal(value);
                   updateLocalProfile({ streakGoal: Number(value) || 0 });
                 }}

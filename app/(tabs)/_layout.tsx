@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -107,7 +107,6 @@ function ChatIcon({ size = 24, color = '#588B76' }: { size?: number; color?: str
 export default function TabLayout() {
   const router = useRouter();
   const { isReady, isAuthenticated } = useAuth();
-  const [checkingSession, setCheckingSession] = useState(true);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -118,10 +117,9 @@ export default function TabLayout() {
       return;
     }
 
-    setCheckingSession(false);
   }, [isAuthenticated, isReady, router]);
 
-  if (checkingSession) {
+  if (!isReady || !isAuthenticated) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' }}>
         <ActivityIndicator size="large" color="#0F3A2B" />

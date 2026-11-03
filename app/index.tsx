@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -9,8 +9,6 @@ import { useAuth } from '../providers/AuthProvider';
 export default function OnboardingScreen() {
   const router = useRouter();
   const { isReady, isAuthenticated } = useAuth();
-  const [checkingSession, setCheckingSession] = useState(true);
-
   useEffect(() => {
     if (!isReady) return;
 
@@ -19,10 +17,9 @@ export default function OnboardingScreen() {
       return;
     }
 
-    setCheckingSession(false);
   }, [isAuthenticated, isReady, router]);
 
-  if (checkingSession) {
+  if (!isReady || isAuthenticated) {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color="#0F3A2B" />
