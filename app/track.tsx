@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -288,19 +288,16 @@ export default function TrackScreen() {
     });
   }, [activePlan, planMetrics, practiceProgress, today, visibleMonth]);
 
-  useEffect(() => {
-    if (!days.some(day => day.iso === selectedDateIso)) {
-      setSelectedDateIso(formatIsoDate(startOfMonth(visibleMonth)));
-    }
-  }, [days, selectedDateIso, visibleMonth]);
-
   const changeMonth = (amount: number) => {
     const nextMonth = startOfMonth(addDays(visibleMonth, amount * 32));
     setVisibleMonth(nextMonth);
     setSelectedDateIso(formatIsoDate(nextMonth));
   };
 
-  const selectedDay = days.find(day => day.iso === selectedDateIso) ?? days[0];
+  const selectedDay = days.find(day => day.iso === selectedDateIso)
+    ?? days.find(day => day.isCurrentMonth)
+    ?? days[0];
+  const effectiveSelectedDateIso = selectedDay?.iso ?? selectedDateIso;
   const selectedStats = selectedDay ? practiceProgress?.daily[selectedDay.iso] : undefined;
   const selectedDayPlanText = selectedDay?.isPlanned
     ? `${planMetrics?.pagesPerDay ?? 0} page${planMetrics?.pagesPerDay === 1 ? '' : 's'} planned`
@@ -399,7 +396,7 @@ export default function TrackScreen() {
 
             <View style={styles.calendarGrid}>
               {days.map(d => {
-                const isSelected = d.iso === selectedDateIso;
+                const isSelected = d.iso === effectiveSelectedDateIso;
                 return (
                   <TouchableOpacity
                     key={d.key}

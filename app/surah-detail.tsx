@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -55,16 +55,9 @@ export default function SurahDetailScreen() {
   const [surah, setSurah] = useState<Surah | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [bismillah, setBismillah] = useState<string>('');
   const [totalAyahs, setTotalAyahs] = useState<number>(0);
 
-  useEffect(() => {
-    if (surahNumber) {
-      fetchSurahData();
-    }
-  }, [surahNumber]);
-
-  const fetchSurahData = async () => {
+  const fetchSurahData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -222,7 +215,6 @@ export default function SurahDetailScreen() {
         }));
       }
       
-      setBismillah(bismillahText);
       
       // Fetch translation from QuranEnc API
       try {
@@ -340,7 +332,13 @@ export default function SurahDetailScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [surahNumber]);
+
+  useEffect(() => {
+    if (surahNumber) {
+      void fetchSurahData();
+    }
+  }, [fetchSurahData]);
 
   const visibleAyahs = useMemo(
     () => (surah ? surah.ayahs.filter((ayah) => ayah.numberInSurah >= startAyah) : []),
